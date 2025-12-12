@@ -301,17 +301,17 @@ def collect_data(args):
                         keep_episode = False
                     
                     if keep_episode and len(episode_data["act"][env_idx]) > 0:
-                        # Convert lists to numpy arrays
+                        # Convert lists to numpy arrays (float64 for compatibility)
                         ep_data = {
-                            "act": np.array(episode_data["act"][env_idx], dtype=np.float32),
-                            "body_pos": np.array(episode_data["body_pos"][env_idx], dtype=np.float32),
-                            "body_rot": np.array(episode_data["body_rot"][env_idx], dtype=np.float32),
-                            "body_lin_vel": np.array(episode_data["body_lin_vel"][env_idx], dtype=np.float32),
-                            "body_ang_vel": np.array(episode_data["body_ang_vel"][env_idx], dtype=np.float32),
-                            "joint_pos": np.array(episode_data["joint_pos"][env_idx], dtype=np.float32),
-                            "joint_vel": np.array(episode_data["joint_vel"][env_idx], dtype=np.float32),
-                            "root_pos": np.array(episode_data["root_pos"][env_idx], dtype=np.float32),
-                            "root_rot": np.array(episode_data["root_rot"][env_idx], dtype=np.float32),
+                            "act": np.array(episode_data["act"][env_idx], dtype=np.float64),
+                            "body_pos": np.array(episode_data["body_pos"][env_idx], dtype=np.float64),
+                            "body_rot": np.array(episode_data["body_rot"][env_idx], dtype=np.float64),
+                            "body_lin_vel": np.array(episode_data["body_lin_vel"][env_idx], dtype=np.float64),
+                            "body_ang_vel": np.array(episode_data["body_ang_vel"][env_idx], dtype=np.float64),
+                            "joint_pos": np.array(episode_data["joint_pos"][env_idx], dtype=np.float64),
+                            "joint_vel": np.array(episode_data["joint_vel"][env_idx], dtype=np.float64),
+                            "root_pos": np.array(episode_data["root_pos"][env_idx], dtype=np.float64),
+                            "root_rot": np.array(episode_data["root_rot"][env_idx], dtype=np.float64),
                         }
                         
                         # Add episode to buffer
