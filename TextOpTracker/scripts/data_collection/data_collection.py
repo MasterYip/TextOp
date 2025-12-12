@@ -272,8 +272,8 @@ def collect_data(args):
                 episode_data["root_rot"][env_idx].append(robot_state["root_rot"][env_idx])
             
             # Step environment
-            obs, rewards, terminated, truncated, infos = wrapped_env.step(actions)
-            dones = terminated | truncated
+            obs, rewards, terminated, infos = wrapped_env.step(actions)
+            dones = terminated
             
             # Update episode statistics
             episode_lengths += 1
@@ -363,15 +363,15 @@ def collect_data(args):
         'task': args.task,
         'checkpoint': args.checkpoint,
         'motion_file': args.motion_file,
-        'num_envs': args.num_envs,
-        'min_episode_length': args.min_episode_length,
-        'min_mean_reward': args.min_mean_reward,
-        'len_to_save': args.len_to_save,
-        'total_episodes_collected': total_episodes_collected,
-        'total_episodes_saved': total_episodes_saved,
-        'total_timesteps': total_saved_steps,
-        'n_episodes': buffer.n_episodes,
-        'seed': args.seed,
+        'num_envs': int(args.num_envs),
+        'min_episode_length': int(args.min_episode_length),
+        'min_mean_reward': float(args.min_mean_reward) if args.min_mean_reward is not None else None,
+        'len_to_save': int(args.len_to_save),
+        'total_episodes_collected': int(total_episodes_collected),
+        'total_episodes_saved': int(total_episodes_saved),
+        'total_timesteps': int(total_saved_steps),
+        'n_episodes': int(buffer.n_episodes),
+        'seed': int(args.seed),
         'creation_time': time.strftime("%Y-%m-%d %H:%M:%S")
     }
     

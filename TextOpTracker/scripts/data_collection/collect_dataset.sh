@@ -4,13 +4,13 @@
 # This script collects training data from a trained TextOpTracker policy for diffuse_cloc
 
 # Default values
-CHECKPOINT="logs/rsl_rl/tracking/exported/policy.pt"
-MOTION_FILE="Data10k-open"
+CHECKPOINT="logs/rsl_rl/ExampleRun/2025-12-02_12-02-34_base/model_4000.pt"
+MOTION_FILE="Data10k-open/dance1_subject2_0_3945"
 OUTPUT="artifacts/g1_tracking_dataset/motion.zarr"
 NUM_ENVS=100
 MIN_EPISODE_LENGTH=300
 LEN_TO_SAVE=500000
-TASK="Isaac-TextOp-Tracking-G1-Direct-v0"
+TASK="Tracking-Flat-G1-ProjGravObs-MNMLP-v0"
 
 # Parse command line arguments
 while [[ $# -gt 0 ]]; do
@@ -68,7 +68,7 @@ echo "=========================================="
 # Run data collection
 cd "$(dirname "$0")/../.." || exit
 
-python -m TextOpTracker.scripts.data_collection.data_collection \
+python scripts/data_collection/data_collection.py \
     --checkpoint "$CHECKPOINT" \
     --motion_file "$MOTION_FILE" \
     --output "$OUTPUT" \
