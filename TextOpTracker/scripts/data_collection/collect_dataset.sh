@@ -4,13 +4,14 @@
 # This script collects training data from a trained TextOpTracker policy for diffuse_cloc
 
 # Default values
-CHECKPOINT="logs/rsl_rl/ExampleRun/2025-12-02_12-02-34_base/model_4000.pt"
-MOTION_FILE="Data10k-open/dance1_subject2_0_3945"
+CHECKPOINT="logs/rsl_rl/Pretrained/checkpoints/model_75000.pt"
+MOTION_FILE="Data10k-open/homejrhangmr_dataset_pbhc_contact_maskACCADFemale1General_c3dA1-Stand_posespkl"
 OUTPUT="artifacts/g1_tracking_dataset/motion.zarr"
 NUM_ENVS=2048
 MIN_EPISODE_LENGTH=500
 LEN_TO_SAVE=500000
 TASK="Tracking-Flat-G1-ProjGravObs-MNMLP-v0"
+LOAD_PICKLE_CFG="--load_pickle_cfg"
 
 # Parse command line arguments
 while [[ $# -gt 0 ]]; do
@@ -47,6 +48,10 @@ while [[ $# -gt 0 ]]; do
             HEADLESS="--headless"
             shift
             ;;
+        --load_pickle_cfg)
+            LOAD_PICKLE_CFG="--load_pickle_cfg"
+            shift
+            ;;
         *)
             echo "Unknown option: $1"
             exit 1
@@ -77,7 +82,8 @@ python scripts/data_collection/data_collection.py \
     --len_to_save "$LEN_TO_SAVE" \
     --task "$TASK" \
     $VISUALIZE \
-    $HEADLESS
+    $HEADLESS \
+    $LOAD_PICKLE_CFG
 
 echo "=========================================="
 echo "Data collection complete!"

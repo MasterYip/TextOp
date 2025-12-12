@@ -110,6 +110,11 @@ def create_arg_parser():
         action="store_true",
         help="Enable visualization"
     )
+    parser.add_argument(
+        "--load_pickle_cfg",
+        action="store_true",
+        help="Load environment and agent config from pickle files instead of Hydra"
+    )
     return parser
 
 
@@ -183,12 +188,19 @@ def collect_data(args):
     # Import tasks to register environment
     import textop_tracker.tasks  # noqa: F401
     from isaaclab_rl.rsl_rl import RslRlVecEnvWrapper
+    from isaaclab_tasks.utils.hydra import register_task_to_hydra
     from isaaclab.utils.io.pkl import load_pickle
     
-    # Load environment and agent config
-    param_dir = Path(args.checkpoint).parent / "params"
-    env_cfg = load_pickle(str(param_dir / "env.pkl"))
-    agent_cfg = load_pickle(str(param_dir / "agent.pkl"))
+    # Try to load config using Hydra first (like play.py), fallback to pickle
+    if args.load_pickle_cfg:
+        param_dir = Path(args.checkpoint).parent / "params"
+        env_cfg = load_pickle(str(param_dir / "env.pkl"))
+        agent_cfg = load_pickle(str(param_dir / "agent.pkl"))
+        print(f"[INFO] Successfully loaded config from pickle files")
+    else:
+        env_cfg, agent_cfg = register_task_to_hydra(args.task, "rsl_rl_cfg_entry_point")
+        print(f"[INFO] Successfully loaded config using Hydra")
+        
     
     # Update environment config
     env_cfg.scene.num_envs = args.num_envs
