@@ -136,8 +136,8 @@ We have provided a pretrained checkpoint:
 - Change `/path/to/motion` to be your motion name, e.g. `Data10k-open/homejrhangmr_dataset_pbhc_contact_maskACCADFemale1General_c3dA1-Stand_posespkl`.
 ```bash
 python scripts/rsl_rl/play.py --task=Tracking-Flat-G1-ProjGravObs-MNMLP-v0 \
-    --resume_path=/path/to/experiment/model_100000.pt \
-    --motion_file=/path/to/motion \
+    --resume_path=/home/user/CodeSpace/HumanoidCtrl/TextOp/TextOpTracker/logs/rsl_rl/Pretrained/checkpoints/model_75000.pt \
+    --motion_file=/home/user/CodeSpace/HumanoidCtrl/TextOp/TextOpTracker/artifacts/Data10k-open/homejrhanprojectsPBHC-InternalPBHC-Motiong1robotlafanrun2_subject1_0_7345_cont_mask_inter05_S1674-30 \
     env.commands.motion.anchor_body_name="pelvis" \
     env.commands.motion.future_steps=5 \
     agent.policy.actor_hidden_dims=[2048,1024,512] \
@@ -170,7 +170,7 @@ python scripts/rsl_rl/train.py --headless --log_project_name TextOpTracker \
 --run_name base \
 agent.experiment_name=ExampleRun \
 agent.max_iterations=1000000 \
---num_envs=16384 \
+--num_envs=6144 \
 env.commands.motion.anchor_body_name="pelvis" \
 env.commands.motion.future_steps=5 \
 env.commands.motion.random_static_prob=-1.0 \
