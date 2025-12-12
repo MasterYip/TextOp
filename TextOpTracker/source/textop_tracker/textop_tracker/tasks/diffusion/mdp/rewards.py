@@ -9,7 +9,7 @@ from isaaclab.sensors import ContactSensor
 from isaaclab.assets import Articulation
 from isaaclab.utils.math import quat_error_magnitude
 from isaaclab.envs.mdp.rewards import contact_forces
-from textop_tracker.tasks.tracking.mdp import MotionCommand
+from textop_tracker.tasks.diffusion.mdp import MotionCommand
 if TYPE_CHECKING:
     from isaaclab.envs import ManagerBasedRLEnv
 

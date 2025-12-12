@@ -12,7 +12,7 @@ if DIFFUSE_CLOC_PATH not in sys.path:
 
 from isaaclab.utils.math import matrix_from_quat, subtract_frame_transforms
 
-from textop_tracker.tasks.tracking.mdp import MotionCommand
+from textop_tracker.tasks.diffusion.mdp import MotionCommand
 from isaaclab.envs.mdp.observations import SceneEntityCfg
 from isaaclab.envs.mdp.observations import Articulation
 

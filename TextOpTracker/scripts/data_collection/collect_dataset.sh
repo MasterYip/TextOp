@@ -7,8 +7,8 @@
 CHECKPOINT="logs/rsl_rl/ExampleRun/2025-12-02_12-02-34_base/model_4000.pt"
 MOTION_FILE="Data10k-open/dance1_subject2_0_3945"
 OUTPUT="artifacts/g1_tracking_dataset/motion.zarr"
-NUM_ENVS=100
-MIN_EPISODE_LENGTH=300
+NUM_ENVS=2048
+MIN_EPISODE_LENGTH=500
 LEN_TO_SAVE=500000
 TASK="Tracking-Flat-G1-ProjGravObs-MNMLP-v0"
 

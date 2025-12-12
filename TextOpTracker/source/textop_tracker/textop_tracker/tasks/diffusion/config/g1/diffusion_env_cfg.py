@@ -56,6 +56,24 @@ class G1DiffusionEnvCfg(TrackingEnvCfg):
             "right_wrist_yaw_link",
         ]
         
+        # # Set a dummy motion file - required for MotionCommand initialization
+        # # but not actually used during diffusion policy execution (policy generates its own actions)
+        # import glob
+        # from pathlib import Path
+        # motion_files = glob.glob(str(Path(__file__).parent.parent.parent.parent.parent.parent.parent / "artifacts" / "Data10k-open" / "*" / "motion.npz"))
+        # if motion_files:
+        #     self.commands.motion.motion_files = [motion_files[0]]
+        # else:
+        #     # Fallback: try to find any motion file
+        #     motion_files = glob.glob(str(Path(__file__).parent.parent.parent.parent.parent.parent.parent / "artifacts" / "**" / "motion.npz"), recursive=True)
+        #     if motion_files:
+        #         self.commands.motion.motion_files = [motion_files[0]]
+        #     else:
+        #         raise FileNotFoundError("No motion.npz files found in artifacts directory")
+
+        # Placeholder motion file path (not used during diffusion policy execution)
+        self.commands.motion.motion_files = ["/home/user/CodeSpace/HumanoidCtrl/TextOp/TextOpTracker/artifacts/Data10k-open/dance1_subject2_0_3945/motion.npz"]
+        
         # Disable domain randomization for clean evaluation
         self.events.push_robot = None
         self.events.physics_material = None

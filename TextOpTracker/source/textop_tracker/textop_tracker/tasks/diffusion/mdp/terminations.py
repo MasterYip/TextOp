@@ -13,8 +13,8 @@ from isaaclab.assets import Articulation, RigidObject
 from isaaclab.managers import SceneEntityCfg
 from isaaclab.envs.mdp.terminations import joint_pos_out_of_limit, joint_vel_out_of_limit, joint_vel_out_of_manual_limit
 
-from textop_tracker.tasks.tracking.mdp import MotionCommand
-from textop_tracker.tasks.tracking.mdp.rewards import _get_body_indexes
+from textop_tracker.tasks.diffusion.mdp import MotionCommand
+from textop_tracker.tasks.diffusion.mdp.rewards import _get_body_indexes
 
 @torch.jit.script
 def quat_apply_inverse(quat: torch.Tensor, vec: torch.Tensor) -> torch.Tensor:

@@ -22,7 +22,7 @@ from isaaclab.terrains import TerrainImporterCfg
 from isaaclab.utils import configclass
 from isaaclab.utils.noise import AdditiveUniformNoiseCfg as Unoise, GaussianNoiseCfg
 
-import textop_tracker.tasks.tracking.mdp as mdp
+import textop_tracker.tasks.diffusion.mdp as mdp
 
 ##
 # Scene definition
