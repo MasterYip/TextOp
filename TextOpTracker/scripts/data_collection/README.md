@@ -202,12 +202,3 @@ The collected dataset can be directly used with DiffuseCLOC training:
 - `diffuse_cloc/diffusion_policy/dataset/g1_offline_dataset.py`: Dataset loading and normalization
 - `TextOpTracker/scripts/rsl_rl/play.py`: Policy evaluation and export
 
-## Prompt
-
-Now I need to collect g1 dataset used by #file:g1_offline_dataset.py   for diffuse_cloc training.
-I need you implement #file:data_collection.py  and the needed python scripts in TextOpTracker/scripts/data_collection for this data set.
-Requirements:
-1. Collect data and save to zarr according to TextOpTracker/scripts/data_collection/replay_buffer.py.
-2. The dataset structure should match #file:g1_offline_dataset.py  #file:offline_dataset.py .
-3. Fow the possibly needed observations and actions see #file:play.py  #file:observations.py  #file:tracking_env_cfg.py , etc. 
-4. See TextOpTracker/scripts/data_collection/legged_gym_dataset_gen.py for how data is handled: collect the env that runs longger than specified step for data quality. (or you can select env which mean reward above specified value for data quality)

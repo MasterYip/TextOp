@@ -1,5 +1,25 @@
 # G1 Dataset Collection Implementation Summary
 
+## Prompt
+
+Now I need to collect g1 dataset used by #file:g1_offline_dataset.py   for diffuse_cloc training.
+I need you implement #file:data_collection.py  and the needed python scripts in TextOpTracker/scripts/data_collection for this data set.
+Requirements:
+1. Collect data and save to zarr according to TextOpTracker/scripts/data_collection/replay_buffer.py.
+2. The dataset structure should match #file:g1_offline_dataset.py  #file:offline_dataset.py .
+3. Fow the possibly needed observations and actions see #file:play.py  #file:observations.py  #file:tracking_env_cfg.py , etc. 
+4. See TextOpTracker/scripts/data_collection/legged_gym_dataset_gen.py for how data is handled: collect the env that runs longger than specified step for data quality. (or you can select env which mean reward above specified value for data quality)
+
+The data consistency is an imporatant part when training & eval. I need you do according to my instructions to ensure the data consistency through data collection, training and eval.
+Overview:
+1. For now, we collect raw data using #sym:extract_robot_state function from env.
+2. This raw data is processed in #file:g1_offline_dataset.py with normalization & augmentation before feeding into the model when training.
+3. However, this process is not performed when eval in #file:isaac_lab_runner.py , on the other hand, #sym:diffusion_state_observation  handles the observation in a slightly different way than #sym:extract_robot_state .
+What I want:
+1. In #sym:diffusion_state_observation , you should first call #sym:extract_robot_state , then import #file:g1_offline_dataset.py  to do #sym:state_normalize .
+2. #sym:extract_robot_state  should be implemented in #file:observations.py , and used by #file:data_collection.py .
+3. About import, diffusion_policy & textop_tracker are all registered and installed in pip, no need to worry about the import path.
+
 ## Overview
 
 I have implemented a complete data collection pipeline for collecting G1 robot training data from the TextOpTracker environment for use with DiffuseCLOC training.
