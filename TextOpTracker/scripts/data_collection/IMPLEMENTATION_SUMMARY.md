@@ -2,6 +2,7 @@
 
 ## Prompt
 
+### Data collection for G1 Dataset
 Now I need to collect g1 dataset used by #file:g1_offline_dataset.py   for diffuse_cloc training.
 I need you implement #file:data_collection.py  and the needed python scripts in TextOpTracker/scripts/data_collection for this data set.
 Requirements:
@@ -10,6 +11,7 @@ Requirements:
 3. Fow the possibly needed observations and actions see #file:play.py  #file:observations.py  #file:tracking_env_cfg.py , etc. 
 4. See TextOpTracker/scripts/data_collection/legged_gym_dataset_gen.py for how data is handled: collect the env that runs longger than specified step for data quality. (or you can select env which mean reward above specified value for data quality)
 
+### Data consistency requirement
 The data consistency is an imporatant part when training & eval. I need you do according to my instructions to ensure the data consistency through data collection, training and eval.
 Overview:
 1. For now, we collect raw data using #sym:extract_robot_state function from env.
@@ -19,6 +21,12 @@ What I want:
 1. In #sym:diffusion_state_observation , you should first call #sym:extract_robot_state , then import #file:g1_offline_dataset.py  to do #sym:state_normalize .
 2. #sym:extract_robot_state  should be implemented in #file:observations.py , and used by #file:data_collection.py .
 3. About import, diffusion_policy & textop_tracker are all registered and installed in pip, no need to worry about the import path.
+
+
+in #file:observations.py , I notice that the history H=1, which can only select nominal_frame_idx=0, which don't match the #file:g1_offline_dataset.py  (using n_past_step-1)
+To fix this, you should:
+1. #sym:diffusion_state_observation  directly return #sym:extract_robot_state result (concatenate them for formattion requirements)
+2. in #file:isaac_lab_runner.py , split the observation into different states and stack them for past n steps like #file:data_collection.py , them call #sym:state_normalize  with the correct nomianl_frame_idx to get the correct observation.
 
 ## Overview
 
