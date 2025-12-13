@@ -35,6 +35,9 @@ sys.path.append(ROOT_DIR)
 
 from replay_buffer import ReplayBuffer
 
+# Import extract_robot_state from textop_tracker for consistency
+from textop_tracker.tasks.diffusion.mdp.observations import extract_robot_state
+
 
 def create_arg_parser():
     parser = argparse.ArgumentParser(description="Collect G1 dataset from tracking environment")
@@ -116,54 +119,6 @@ def create_arg_parser():
         help="Load environment and agent config from pickle files instead of Hydra"
     )
     return parser
-
-
-def extract_robot_state(env) -> Dict[str, np.ndarray]:
-    """
-    Extract robot state data from the environment.
-    
-    Returns dictionary with keys matching OfflineDataset requirements:
-        - body_pos: [num_envs, 30, 3]
-        - body_rot: [num_envs, 30, 4] 
-        - body_lin_vel: [num_envs, 30, 3]
-        - body_ang_vel: [num_envs, 30, 3]
-        - joint_pos: [num_envs, 29]
-        - joint_vel: [num_envs, 29]
-        - root_pos: [num_envs, 3]
-        - root_rot: [num_envs, 4]
-    """
-    robot = env.scene["robot"]
-    command = env.command_manager.get_term("motion")
-    
-    # Get body data for all bodies (30 bodies for G1)
-    # robot.data.body_pos_w and body_quat_w include all bodies
-    body_pos_w = robot.data.body_pos_w.clone()  # [num_envs, num_bodies, 3]
-    body_quat_w = robot.data.body_quat_w.clone()  # [num_envs, num_bodies, 4]
-    body_lin_vel_w = robot.data.body_lin_vel_w.clone()  # [num_envs, num_bodies, 3]
-    body_ang_vel_w = robot.data.body_ang_vel_w.clone()  # [num_envs, num_bodies, 3]
-    
-    # Remove environment origins to get world-frame positions
-    env_origins = env.scene.env_origins  # [num_envs, 3]
-    body_pos_w = body_pos_w - env_origins[:, None, :]
-    
-    # Get joint data (29 joints for G1)
-    joint_pos = robot.data.joint_pos.clone()  # [num_envs, 29]
-    joint_vel = robot.data.joint_vel.clone()  # [num_envs, 29]
-    
-    # Get root (pelvis) data - root is the first body (index 0)
-    root_pos = body_pos_w[:, 0, :]  # [num_envs, 3]
-    root_rot = body_quat_w[:, 0, :]  # [num_envs, 4]
-    
-    return {
-        "body_pos": body_pos_w.cpu().numpy(),  # [num_envs, 30, 3]
-        "body_rot": body_quat_w.cpu().numpy(),  # [num_envs, 30, 4]
-        "body_lin_vel": body_lin_vel_w.cpu().numpy(),  # [num_envs, 30, 3]
-        "body_ang_vel": body_ang_vel_w.cpu().numpy(),  # [num_envs, 30, 3]
-        "joint_pos": joint_pos.cpu().numpy(),  # [num_envs, 29]
-        "joint_vel": joint_vel.cpu().numpy(),  # [num_envs, 29]
-        "root_pos": root_pos.cpu().numpy(),  # [num_envs, 3]
-        "root_rot": root_rot.cpu().numpy(),  # [num_envs, 4]
-    }
 
 
 def collect_data(args):
@@ -268,20 +223,26 @@ def collect_data(args):
             # Get action from policy
             actions = policy(obs)
             
-            # Extract robot state before step
+            # Extract robot state before step (returns tensors)
             robot_state = extract_robot_state(env_unwrapped)
+            
+            # Convert to numpy for storage
+            robot_state_np = {
+                key: value.cpu().numpy() if isinstance(value, torch.Tensor) else value
+                for key, value in robot_state.items()
+            }
             
             # Store current state and action for all envs
             for env_idx in range(args.num_envs):
                 episode_data["act"][env_idx].append(actions[env_idx].cpu().numpy())
-                episode_data["body_pos"][env_idx].append(robot_state["body_pos"][env_idx])
-                episode_data["body_rot"][env_idx].append(robot_state["body_rot"][env_idx])
-                episode_data["body_lin_vel"][env_idx].append(robot_state["body_lin_vel"][env_idx])
-                episode_data["body_ang_vel"][env_idx].append(robot_state["body_ang_vel"][env_idx])
-                episode_data["joint_pos"][env_idx].append(robot_state["joint_pos"][env_idx])
-                episode_data["joint_vel"][env_idx].append(robot_state["joint_vel"][env_idx])
-                episode_data["root_pos"][env_idx].append(robot_state["root_pos"][env_idx])
-                episode_data["root_rot"][env_idx].append(robot_state["root_rot"][env_idx])
+                episode_data["body_pos"][env_idx].append(robot_state_np["body_pos"][env_idx])
+                episode_data["body_rot"][env_idx].append(robot_state_np["body_rot"][env_idx])
+                episode_data["body_lin_vel"][env_idx].append(robot_state_np["body_lin_vel"][env_idx])
+                episode_data["body_ang_vel"][env_idx].append(robot_state_np["body_ang_vel"][env_idx])
+                episode_data["joint_pos"][env_idx].append(robot_state_np["joint_pos"][env_idx])
+                episode_data["joint_vel"][env_idx].append(robot_state_np["joint_vel"][env_idx])
+                episode_data["root_pos"][env_idx].append(robot_state_np["root_pos"][env_idx])
+                episode_data["root_rot"][env_idx].append(robot_state_np["root_rot"][env_idx])
             
             # Step environment
             obs, rewards, terminated, infos = wrapped_env.step(actions)

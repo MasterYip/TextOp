@@ -159,11 +159,63 @@ def motion_anchor_ori_b_future(env: ManagerBasedEnv, command_name: str) -> torch
     return mat[..., :2].reshape(mat.shape[0], -1)
 
 
+def extract_robot_state(env: ManagerBasedEnv) -> dict:
+    """
+    Extract raw robot state data from the environment.
+    
+    This function provides the raw data in the same format used during data collection.
+    Returns dictionary with keys matching OfflineDataset requirements:
+        - body_pos: [num_envs, 30, 3]
+        - body_rot: [num_envs, 30, 4] 
+        - body_lin_vel: [num_envs, 30, 3]
+        - body_ang_vel: [num_envs, 30, 3]
+        - joint_pos: [num_envs, 29]
+        - joint_vel: [num_envs, 29]
+        - root_pos: [num_envs, 3]
+        - root_rot: [num_envs, 4]
+    """
+    robot = env.scene["robot"]
+    
+    # Get body data for all bodies (30 bodies for G1)
+    # robot.data.body_pos_w and body_quat_w include all bodies
+    body_pos_w = robot.data.body_pos_w.clone()  # [num_envs, num_bodies, 3]
+    body_quat_w = robot.data.body_quat_w.clone()  # [num_envs, num_bodies, 4]
+    body_lin_vel_w = robot.data.body_lin_vel_w.clone()  # [num_envs, num_bodies, 3]
+    body_ang_vel_w = robot.data.body_ang_vel_w.clone()  # [num_envs, num_bodies, 3]
+    
+    # Remove environment origins to get world-frame positions
+    env_origins = env.scene.env_origins  # [num_envs, 3]
+    body_pos_w = body_pos_w - env_origins[:, None, :]
+    
+    # Get joint data (29 joints for G1)
+    joint_pos = robot.data.joint_pos.clone()  # [num_envs, 29]
+    joint_vel = robot.data.joint_vel.clone()  # [num_envs, 29]
+    
+    # Get root (pelvis) data - root is the first body (index 0)
+    root_pos = body_pos_w[:, 0, :]  # [num_envs, 3]
+    root_rot = body_quat_w[:, 0, :]  # [num_envs, 4]
+    
+    return {
+        "body_pos": body_pos_w,  # [num_envs, 30, 3]
+        "body_rot": body_quat_w,  # [num_envs, 30, 4]
+        "body_lin_vel": body_lin_vel_w,  # [num_envs, 30, 3]
+        "body_ang_vel": body_ang_vel_w,  # [num_envs, 30, 3]
+        "joint_pos": joint_pos,  # [num_envs, 29]
+        "joint_vel": joint_vel,  # [num_envs, 29]
+        "root_pos": root_pos,  # [num_envs, 3]
+        "root_rot": root_rot,  # [num_envs, 4]
+    }
+
+
 def diffusion_state_observation(env: ManagerBasedEnv) -> torch.Tensor:
     """
     Extract and normalize robot state for diffusion policy matching G1_Dataset format.
     
-    Returns normalized observation matching data collection format:
+    This function ensures data consistency by:
+    1. Using extract_robot_state() to get raw data (same as data collection)
+    2. Applying G1_Dataset.state_normalize() (same as training)
+    
+    Returns normalized observation matching G1_Dataset format:
         - body_pos_local: [num_envs, 30, 3] -> [num_envs, 90]
         - body_lin_vel_local: [num_envs, 30, 3] -> [num_envs, 90]
         - root_pos_local: [num_envs, 3]
@@ -173,83 +225,40 @@ def diffusion_state_observation(env: ManagerBasedEnv) -> torch.Tensor:
     
     Total: 192 dimensions (matching G1_Dataset normalization)
     """
-    robot = env.scene["robot"]
+    # Import G1_Dataset for normalization (same as training)
+    from diffusion_policy.dataset.g1_offline_dataset import G1_Dataset
     
-    # Get body data for all bodies (30 bodies for G1)
-    body_pos_w = robot.data.body_pos_w.clone()  # [num_envs, 30, 3]
-    body_quat_w = robot.data.body_quat_w.clone()  # [num_envs, 30, 4]
-    body_lin_vel_w = robot.data.body_lin_vel_w.clone()  # [num_envs, 30, 3]
-    body_ang_vel_w = robot.data.body_ang_vel_w.clone()  # [num_envs, 30, 3]
+    # Step 1: Extract raw robot state (same as data collection)
+    robot_state = extract_robot_state(env)
     
-    # Remove environment origins to get world-frame positions
-    env_origins = env.scene.env_origins  # [num_envs, 3]
-    body_pos_w = body_pos_w - env_origins[:, None, :]
+    # Step 2: Prepare data for G1_Dataset.state_normalize
+    # Add time dimension (single timestep, current frame)
+    B = robot_state["root_pos"].shape[0]
     
-    # Get root data (pelvis is first body, index 0)
-    root_pos = body_pos_w[:, 0, :]  # [num_envs, 3]
-    root_quat = body_quat_w[:, 0, :]  # [num_envs, 4]
-    root_lin_vel = body_lin_vel_w[:, 0, :]  # [num_envs, 3]
-    root_ang_vel = body_ang_vel_w[:, 0, :]  # [num_envs, 3]
+    # Reshape data to match expected input format [B, H, ...] where H=1 for single timestep
+    root_pos_frame = robot_state["root_pos"].unsqueeze(1)  # [B, 1, 3]
+    root_rot_frame = robot_state["root_rot"].unsqueeze(1)  # [B, 1, 4]
+    body_pos = robot_state["body_pos"].unsqueeze(1)  # [B, 1, 30, 3]
+    body_rot = robot_state["body_rot"].unsqueeze(1)  # [B, 1, 30, 4]
+    body_lin_vel = robot_state["body_lin_vel"].unsqueeze(1)  # [B, 1, 30, 3]
+    body_ang_vel = robot_state["body_ang_vel"].unsqueeze(1)  # [B, 1, 30, 3]
+    joint_pos = robot_state["joint_pos"].unsqueeze(1)  # [B, 1, 29]
     
-    # Add time dimension for normalization (single timestep, current frame)
-    # Shape becomes [B, 1, ...] for compatibility with G1Dataset normalization
-    B = root_pos.shape[0]
-    body_pos = body_pos_w.unsqueeze(1)  # [B, 1, 30, 3]
-    root_pos_frame = root_pos.unsqueeze(1)  # [B, 1, 3]
-    root_rot_frame = root_quat.unsqueeze(1)  # [B, 1, 4]
-    body_lin_vel = body_lin_vel_w.unsqueeze(1)  # [B, 1, 30, 3]
-    body_ang_vel = body_ang_vel_w.unsqueeze(1)  # [B, 1, 30, 3]
-    
-    # Compute yaw frame (gravity-aligned rotation)
-    roll, pitch, yaw = get_euler_xyz(root_rot_frame.reshape(-1, 4))
-    yaw_quat = quat_from_euler_xyz(roll * 0, pitch * 0, yaw).reshape(B, 1, 4)
-    
-    # Normalize body positions (remove root translation and rotate to yaw frame)
-    J = body_pos.shape[2]  # 30 bodies
-    body_pos_local = body_pos.clone()
-    body_pos_local[:, :, :, :2] -= root_pos_frame[:, :, None, :2]  # Remove XY translation
-    body_pos_local = quat_rotate_inverse(
-        yaw_quat[:, :, None, :].repeat(1, 1, J, 1).reshape(-1, 4),
-        body_pos_local.reshape(-1, 3),
-    ).reshape(B, 1, J, 3)
-    
-    # Normalize body linear velocities (remove root velocity and rotate to yaw frame)
-    body_lin_vel_local = body_lin_vel.clone() - root_lin_vel.unsqueeze(1).unsqueeze(2)
-    body_lin_vel_local = quat_rotate_inverse(
-        yaw_quat[:, :, None, :].repeat(1, 1, J, 1).reshape(-1, 4),
-        body_lin_vel_local.reshape(-1, 3),
-    ).reshape(B, 1, J, 3)
-    
-    # Normalize root position (relative to current position, rotated to yaw frame)
-    root_pos_local = torch.zeros_like(root_pos_frame)  # Current frame is origin
-    
-    # Normalize root rotation (relative to yaw orientation)
-    root_rot_local = box_minus(
-        root_rot_frame.reshape(-1, 4),
-        yaw_quat.reshape(-1, 4)
-    ).reshape(B, 1, 3)
-    
-    # Normalize root linear velocity (rotate to yaw frame)
-    root_lin_vel_local = quat_rotate_inverse(
-        yaw_quat.reshape(-1, 4),
-        root_lin_vel.unsqueeze(1).reshape(-1, 3)
-    ).reshape(B, 1, 3)
-    
-    # Normalize root angular velocity (rotate to yaw frame)
-    root_ang_vel_local = quat_rotate_inverse(
-        yaw_quat.reshape(-1, 4),
-        root_ang_vel.unsqueeze(1).reshape(-1, 3)
-    ).reshape(B, 1, 3)
-    
-    # Concatenate all components (removing time dimension for single-step observation)
-    obs = torch.cat([
-        body_pos_local.reshape(B, 1, -1),  # [B, 1, 90]
-        body_lin_vel_local.reshape(B, 1, -1),  # [B, 1, 90]
-        root_pos_local.reshape(B, 1, -1),  # [B, 1, 3]
-        root_rot_local.reshape(B, 1, -1),  # [B, 1, 3]
-        root_lin_vel_local.reshape(B, 1, -1),  # [B, 1, 3]
-        root_ang_vel_local.reshape(B, 1, -1),  # [B, 1, 3]
-    ], dim=-1)  # [B, 1, 192]
+    # Step 3: Apply G1_Dataset normalization (same as training)
+    # nominal_frame_idx=0 since we only have one timestep (current frame)
+    # ee_idxs is not used in G1_Dataset.state_normalize (only in G1_Dataset_EE)
+    obs_normalized = G1_Dataset.state_normalize(
+        root_pos_frame=root_pos_frame,
+        root_rot_frame=root_rot_frame,
+        body_pos=body_pos,
+        body_rot=body_rot,
+        body_lin_vel=body_lin_vel,
+        body_ang_vel=body_ang_vel,
+        nominal_frame_idx=0,  # Current frame is the reference
+        ee_idxs=G1_Dataset.ee_idxs(),
+        joint_pos=joint_pos,
+        return_raw=False,
+    )  # Returns [B, 1, 192]
     
     # Remove time dimension to get [B, 192]
-    return obs.squeeze(1)
+    return obs_normalized.squeeze(1)
