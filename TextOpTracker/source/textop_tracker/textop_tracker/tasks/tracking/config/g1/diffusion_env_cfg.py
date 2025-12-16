@@ -5,8 +5,8 @@ from isaaclab.managers import ObservationGroupCfg as ObsGroup
 from isaaclab.managers import ObservationTermCfg as ObsTerm
 
 from textop_tracker.robots.g1 import G1_ACTION_SCALE, G1_CYLINDER_CFG
-from textop_tracker.tasks.diffusion.tracking_env_cfg import TrackingEnvCfg
-import textop_tracker.tasks.diffusion.mdp as mdp
+from textop_tracker.tasks.tracking.tracking_env_cfg import TrackingEnvCfg
+import textop_tracker.tasks.tracking.mdp as mdp
 
 
 @configclass

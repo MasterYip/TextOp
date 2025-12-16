@@ -216,7 +216,7 @@ def collect_data(args):
     
     pbar = tqdm(total=args.len_to_save, desc="Collecting data")
     # Import extract_robot_state from textop_tracker for consistency
-    from textop_tracker.tasks.diffusion.mdp.observations import extract_robot_state
+    from textop_tracker.tasks.tracking.mdp.observations import extract_robot_state
 
     with torch.inference_mode():
         while total_saved_steps < args.len_to_save and simulation_app.is_running():

@@ -9,6 +9,12 @@ from textop_tracker.tasks.tracking.mdp import MotionCommand
 from isaaclab.envs.mdp.observations import SceneEntityCfg
 from isaaclab.envs.mdp.observations import Articulation
 
+# Import trajectory utilities from diffuse_cloc for state normalization
+from diffusion_policy.utils.traj_utils import (
+    quat_from_euler_xyz, get_euler_xyz, quat_mul, quat_rotate,
+    box_minus, quat_rotate_inverse, box_plus, get_yaw_quat,
+)
+
 if TYPE_CHECKING:
     from isaaclab.envs import ManagerBasedEnv
 
@@ -144,3 +150,90 @@ def motion_anchor_ori_b_future(env: ManagerBasedEnv, command_name: str) -> torch
 
     mat = matrix_from_quat(ori_b)
     return mat[..., :2].reshape(mat.shape[0], -1)
+
+
+def extract_robot_state(env: ManagerBasedEnv) -> dict:
+    """
+    Extract raw robot state data from the environment.
+    
+    This function provides the raw data in the same format used during data collection.
+    Returns dictionary with keys matching OfflineDataset requirements:
+        - body_pos: [num_envs, 30, 3]
+        - body_rot: [num_envs, 30, 4] 
+        - body_lin_vel: [num_envs, 30, 3]
+        - body_ang_vel: [num_envs, 30, 3]
+        - joint_pos: [num_envs, 29]
+        - joint_vel: [num_envs, 29]
+        - root_pos: [num_envs, 3]
+        - root_rot: [num_envs, 4]
+    """
+    robot = env.scene["robot"]
+    
+    # Get body data for all bodies (30 bodies for G1)
+    # robot.data.body_pos_w and body_quat_w include all bodies
+    body_pos_w = robot.data.body_pos_w.clone()  # [num_envs, num_bodies, 3]
+    body_quat_w = robot.data.body_quat_w.clone()  # [num_envs, num_bodies, 4]
+    body_lin_vel_w = robot.data.body_lin_vel_w.clone()  # [num_envs, num_bodies, 3]
+    body_ang_vel_w = robot.data.body_ang_vel_w.clone()  # [num_envs, num_bodies, 3]
+    
+    # Remove environment origins to get world-frame positions
+    env_origins = env.scene.env_origins  # [num_envs, 3]
+    body_pos_w = body_pos_w - env_origins[:, None, :]
+    
+    # Get joint data (29 joints for G1)
+    joint_pos = robot.data.joint_pos.clone()  # [num_envs, 29]
+    joint_vel = robot.data.joint_vel.clone()  # [num_envs, 29]
+    
+    # Get root (pelvis) data - root is the first body (index 0)
+    root_pos = body_pos_w[:, 0, :]  # [num_envs, 3]
+    root_rot = body_quat_w[:, 0, :]  # [num_envs, 4]
+    
+    return {
+        "body_pos": body_pos_w,  # [num_envs, 30, 3]
+        "body_rot": body_quat_w,  # [num_envs, 30, 4]
+        "body_lin_vel": body_lin_vel_w,  # [num_envs, 30, 3]
+        "body_ang_vel": body_ang_vel_w,  # [num_envs, 30, 3]
+        "joint_pos": joint_pos,  # [num_envs, 29]
+        "joint_vel": joint_vel,  # [num_envs, 29]
+        "root_pos": root_pos,  # [num_envs, 3]
+        "root_rot": root_rot,  # [num_envs, 4]
+    }
+
+
+def diffusion_state_observation(env: ManagerBasedEnv) -> torch.Tensor:
+    """
+    Extract raw robot state data for diffusion policy.
+    
+    Returns concatenated raw state matching data collection format.
+    History management and normalization should be done by the runner.
+    
+    Returns:
+        Raw state tensor [num_envs, state_dim] where state_dim includes:
+        - body_pos: [num_envs, 90] (30 bodies × 3)
+        - body_rot: [num_envs, 120] (30 bodies × 4)
+        - body_lin_vel: [num_envs, 90] (30 bodies × 3)
+        - body_ang_vel: [num_envs, 90] (30 bodies × 3)
+        - joint_pos: [num_envs, 29]
+        - joint_vel: [num_envs, 29]
+        - root_pos: [num_envs, 3]
+        - root_rot: [num_envs, 4]
+        
+        Total: 90 + 120 + 90 + 90 + 29 + 29 + 3 + 4 = 455 dimensions
+    """
+    # Extract raw robot state (same as data collection)
+    robot_state = extract_robot_state(env)
+    
+    # Concatenate all state components into a single tensor
+    # This matches the format used during data collection
+    state_tensor = torch.cat([
+        robot_state["body_pos"].flatten(1),      # [B, 30*3] = [B, 90]
+        robot_state["body_rot"].flatten(1),      # [B, 30*4] = [B, 120]
+        robot_state["body_lin_vel"].flatten(1),  # [B, 30*3] = [B, 90]
+        robot_state["body_ang_vel"].flatten(1),  # [B, 30*3] = [B, 90]
+        robot_state["joint_pos"],                # [B, 29]
+        robot_state["joint_vel"],                # [B, 29]
+        robot_state["root_pos"],                 # [B, 3]
+        robot_state["root_rot"],                 # [B, 4]
+    ], dim=-1)  # [B, 455]
+    
+    return state_tensor
