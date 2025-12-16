@@ -5,7 +5,7 @@
 
 # Default values
 CHECKPOINT="logs/rsl_rl/Pretrained/checkpoints/model_75000.pt"
-MOTION_FILE="Data10k-open/homejrhangmr_dataset_pbhc_contact_maskACCADFemale1General_c3dA1-Stand_posespkl"
+MOTION_FILE="Data10k-open/homejrhangmr_dataset_pbhc_contact_maskACCADFemale1Walking_c3dB3-walk1_posespkl"
 OUTPUT="artifacts/g1_tracking_dataset/motion.zarr"
 NUM_ENVS=2048
 MIN_EPISODE_LENGTH=500

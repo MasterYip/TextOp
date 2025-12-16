@@ -35,9 +35,6 @@ sys.path.append(ROOT_DIR)
 
 from replay_buffer import ReplayBuffer
 
-# Import extract_robot_state from textop_tracker for consistency
-from textop_tracker.tasks.diffusion.mdp.observations import extract_robot_state
-
 
 def create_arg_parser():
     parser = argparse.ArgumentParser(description="Collect G1 dataset from tracking environment")
@@ -151,6 +148,7 @@ def collect_data(args):
         param_dir = Path(args.checkpoint).parent / "params"
         env_cfg = load_pickle(str(param_dir / "env.pkl"))
         agent_cfg = load_pickle(str(param_dir / "agent.pkl"))
+        # env_cfg.scene.robot.spawn.fix_base = True  # Ensure robot base is fixed
         print(f"[INFO] Successfully loaded config from pickle files")
     else:
         env_cfg, agent_cfg = register_task_to_hydra(args.task, "rsl_rl_cfg_entry_point")
@@ -217,7 +215,9 @@ def collect_data(args):
         print(f"[INFO] Quality filter: min_mean_reward={args.min_mean_reward}")
     
     pbar = tqdm(total=args.len_to_save, desc="Collecting data")
-    
+    # Import extract_robot_state from textop_tracker for consistency
+    from textop_tracker.tasks.diffusion.mdp.observations import extract_robot_state
+
     with torch.inference_mode():
         while total_saved_steps < args.len_to_save and simulation_app.is_running():
             # Get action from policy
