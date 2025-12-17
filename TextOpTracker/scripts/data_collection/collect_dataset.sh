@@ -5,7 +5,7 @@
 
 # Default values
 CHECKPOINT="logs/rsl_rl/Pretrained/checkpoints/model_75000.pt"
-MOTION_FILE="Data10k-open/homejrhangmr_dataset_pbhc_contact_maskACCADFemale1Walking_c3dB3-walk1_posespkl"
+MOTION_FILE="Data10k-open/*"
 OUTPUT="artifacts/g1_tracking_dataset/motion.zarr"
 NUM_ENVS=2048
 MIN_EPISODE_LENGTH=500  # Default max episode length is 500

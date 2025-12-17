@@ -60,17 +60,13 @@ class G1DiffusionEnvCfg(TrackingEnvCfg):
         # # but not actually used during diffusion policy execution (policy generates its own actions)
         # import glob
         # from pathlib import Path
-        # motion_files = glob.glob(str(Path(__file__).parent.parent.parent.parent.parent.parent.parent / "artifacts" / "Data10k-open" / "*" / "motion.npz"))
+        # ROOT_DIR = Path(__file__).parent.parent.parent.parent.parent.parent.parent.parent
+        # motion_files = glob.glob(str(ROOT_DIR / "artifacts" / "Data10k-open" / "*" / "motion.npz"))
         # if motion_files:
         #     self.commands.motion.motion_files = [motion_files[0]]
         # else:
-        #     # Fallback: try to find any motion file
-        #     motion_files = glob.glob(str(Path(__file__).parent.parent.parent.parent.parent.parent.parent / "artifacts" / "**" / "motion.npz"), recursive=True)
-        #     if motion_files:
-        #         self.commands.motion.motion_files = [motion_files[0]]
-        #     else:
-        #         raise FileNotFoundError("No motion.npz files found in artifacts directory")
-
+        #     raise FileNotFoundError(f"No motion.npz found in {ROOT_DIR / 'artifacts' / 'Data10k-open'}")
+        
         # Placeholder motion file path (not used during diffusion policy execution)
         self.commands.motion.motion_files = ["/home/user/CodeSpace/HumanoidCtrl/TextOp/TextOpTracker/artifacts/Data10k-open/homejrhangmr_dataset_pbhc_contact_maskACCADFemale1Walking_c3dB3-walk1_posespkl/motion.npz"]
         

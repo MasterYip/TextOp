@@ -162,6 +162,10 @@ def collect_data(args):
     motion_files = glob.glob(str(Path("./artifacts") / Path(args.motion_file) / "motion.npz"))
     if not motion_files:
         raise FileNotFoundError(f"No motion.npz found in {Path('./artifacts') / Path(args.motion_file)}")
+    if len(motion_files) > args.num_envs:
+        print(f"[WARNING] Number of motion files ({len(motion_files)}) exceeds num_envs ({args.num_envs}), truncating for loading speed.")
+        motion_files = motion_files[:args.num_envs]
+    
     env_cfg.commands.motion.motion_files = motion_files
     
     print(f"[INFO] Using {len(motion_files)} motion files")
