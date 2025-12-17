@@ -13,9 +13,9 @@ output:
 
 # Task and environment configuration
 task:
-  name: "Isaac-TextOp-Tracking-G1-Direct-v0"
+  name: "Tracking-Flat-G1-ProjGravObs-MNMLP-v0"
   num_envs: 2048
-  max_episode_length: 1000
+  # max_episode_length: 1000 # unused
   seed: 42
 
 # Policy checkpoint
@@ -25,7 +25,7 @@ checkpoint:
 
 # Motion data source
 motion:
-  pattern: "Data10k-open"  # Pattern to match in artifacts directory
+  pattern: "Data10k-open/*"  # Pattern to match in artifacts directory
   # Full path: artifacts/{pattern}/motion.npz
 
 # Data collection settings
@@ -43,7 +43,7 @@ noise:
   theta: 0.8      # Mean reversion rate
   mu: 0.0         # Long-term mean
   sigma: 0.1      # Joint-wise noise scale
-  dt: 1.0         # Time step
+  dt: 0.02         # Time step
   
   # Alternative: Gaussian i.i.d. noise (set type to "gaussian")
   # gaussian_std: 0.1

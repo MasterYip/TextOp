@@ -152,6 +152,7 @@ def collect_data(cfg: DictConfig):
         param_dir = Path(cfg.checkpoint.path).parent / "params"
         env_cfg = load_pickle(str(param_dir / "env.pkl"))
         agent_cfg = load_pickle(str(param_dir / "agent.pkl"))
+        # env_cfg.scene.robot.spawn.fix_base = True  # Ensure robot base is fixed
         print(f"[INFO] Successfully loaded config from pickle files")
     else:
         env_cfg, agent_cfg = register_task_to_hydra(cfg.task.name, "rsl_rl_cfg_entry_point")
@@ -199,7 +200,7 @@ def collect_data(cfg: DictConfig):
     # Initialize noise generator if enabled
     noise_generator = None
     if cfg.noise.enable:
-        action_dim = env_unwrapped.action_space.shape[0]
+        action_dim = wrapped_env.num_actions
         if cfg.noise.type == "ou":
             noise_generator = OUNoise(
                 action_dim=action_dim,
@@ -257,13 +258,6 @@ def collect_data(cfg: DictConfig):
             # Get action from policy
             actions = policy(obs)
             
-            # Apply action noise if enabled
-            if noise_generator is not None:
-                noise = noise_generator.sample()
-                actions = actions + noise
-                # Optionally clip actions to valid range
-                # actions = torch.clamp(actions, -1.0, 1.0)
-            
             # Extract robot state before step (returns tensors)
             robot_state = extract_robot_state(env_unwrapped)
             
@@ -285,6 +279,13 @@ def collect_data(cfg: DictConfig):
                 episode_data["root_pos"][env_idx].append(robot_state_np["root_pos"][env_idx])
                 episode_data["root_rot"][env_idx].append(robot_state_np["root_rot"][env_idx])
             
+            # Apply action noise if enabled
+            if noise_generator is not None:
+                noise = noise_generator.sample()
+                actions = actions + noise
+                # Optionally clip actions to valid range
+                # actions = torch.clamp(actions, -1.0, 1.0)
+
             # Step environment
             obs, rewards, terminated, infos = wrapped_env.step(actions)
             dones = terminated
