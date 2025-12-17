@@ -28,6 +28,37 @@ To fix this, you should:
 1. #sym:diffusion_state_observation  directly return #sym:extract_robot_state result (concatenate them for formattion requirements)
 2. in #file:isaac_lab_runner.py , split the observation into different states and stack them for past n steps like #file:data_collection.py , them call #sym:state_normalize  with the correct nomianl_frame_idx to get the correct observation.
 
+### Data Pertubation
+
+Action Noise Injection
+
+Following prior work, the authors inject action noise during rollout to:
+
+    Perturb the state
+    Collect corrective actions
+    Improve policy robustness to disturbances
+
+This creates a more diverse dataset that helps the model learn recovery behaviors.
+
+BeyondMimic uses:
+
+Ornstein-Uhlenbeck (OU) Noise instead of i.i.d. Gaussian noise WHEN adding pertubations:
+
+η_{t+1} = η_t + θ(μ - η_t)Δt + σ√Δt ε_t, ε_t ~ N(0, I)
+
+Where:
+
+    θ = 0.8 (mean reversion rate)
+    μ = 0 (long-term mean)
+    σ = 0.1 (joint-wise noise scale)
+    Δt = 1.0
+
+Rationale: "Overdamped PD gains suppress high-frequency perturbations, limiting state diversity. OU noise produces temporally correlated action perturbations."
+
+I hope you add noise injection for #file:data_collection.py . Besides, it is inefficient to load param using arg_parse. Please add a data_collection.yaml and use hydra to load the multilevel config.
+
+Like what is done in #file:g1_diffuse.yaml 
+
 ## Overview
 
 I have implemented a complete data collection pipeline for collecting G1 robot training data from the TextOpTracker environment for use with DiffuseCLOC training.

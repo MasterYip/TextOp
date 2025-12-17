@@ -1,0 +1,59 @@
+# Data Collection Configuration for G1 Diffusion Dataset
+# This config follows the structure of g1_diffuse.yaml for consistency
+
+defaults:
+  - _self_
+
+# Output configuration
+output:
+  dir: "artifacts/g1_tracking_dataset"
+  zarr_name: "motion.zarr"
+  compressor: "disk"  # Use zstd compression for disk storage
+  chunk_length: -1  # -1 for auto, or specify chunk size
+
+# Task and environment configuration
+task:
+  name: "Isaac-TextOp-Tracking-G1-Direct-v0"
+  num_envs: 2048
+  max_episode_length: 1000
+  seed: 42
+
+# Policy checkpoint
+checkpoint:
+  path: "logs/rsl_rl/Pretrained/checkpoints/model_75000.pt"
+  load_pickle_cfg: true  # Load env/agent config from pickle files
+
+# Motion data source
+motion:
+  pattern: "Data10k-open"  # Pattern to match in artifacts directory
+  # Full path: artifacts/{pattern}/motion.npz
+
+# Data collection settings
+collection:
+  len_to_save: 4000000  # Total timesteps to collect
+  min_episode_length: 500  # Minimum episode length for quality filter
+  min_mean_reward: null  # Optional: minimum mean reward per episode
+
+# Action noise injection (following BeyondMimic)
+# OU noise creates temporally correlated perturbations for better state diversity
+noise:
+  enable: true
+  type: "ou"  # Ornstein-Uhlenbeck noise
+  # OU noise parameters: η_{t+1} = η_t + θ(μ - η_t)Δt + σ√Δt ε_t
+  theta: 0.8      # Mean reversion rate
+  mu: 0.0         # Long-term mean
+  sigma: 0.1      # Joint-wise noise scale
+  dt: 1.0         # Time step
+  
+  # Alternative: Gaussian i.i.d. noise (set type to "gaussian")
+  # gaussian_std: 0.1
+
+# Visualization
+visualization:
+  headless: true
+  enable_cameras: false
+
+# Logging
+logging:
+  print_interval: 100  # Print stats every N steps
+  save_metadata: true

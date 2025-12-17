@@ -196,9 +196,106 @@ The collected dataset can be directly used with DiffuseCLOC training:
 
 3. Data will be automatically normalized using character-frame normalization during training
 
+## NEW: Action Noise Injection (Following BeyondMimic)
+
+### Overview
+
+The data collection now supports **Ornstein-Uhlenbeck (OU) noise injection** to create more robust training data:
+
+- **Purpose**: Perturb states during rollout to collect corrective actions
+- **Benefit**: Improves policy robustness to disturbances and creates diverse training data
+- **Implementation**: Temporally correlated OU noise instead of i.i.d. Gaussian
+
+### OU Noise Formula
+
+```
+η_{t+1} = η_t + θ(μ - η_t)Δt + σ√Δt ε_t, where ε_t ~ N(0, I)
+```
+
+### Default Parameters (from BeyondMimic)
+
+- `θ = 0.8`: Mean reversion rate
+- `μ = 0.0`: Long-term mean
+- `σ = 0.1`: Joint-wise noise scale
+- `Δt = 1.0`: Time step
+
+### Configuration
+
+Noise parameters are configured in `data_collection.yaml`:
+
+```yaml
+noise:
+  enable: true
+  type: "ou"
+  theta: 0.8
+  mu: 0.0
+  sigma: 0.1
+  dt: 1.0
+```
+
+### Usage Examples
+
+```bash
+# Disable noise
+python scripts/data_collection/data_collection.py noise.enable=false
+
+# Adjust noise scale
+python scripts/data_collection/data_collection.py noise.sigma=0.15
+
+# Using shell script
+bash scripts/data_collection/collect_dataset.sh --no_noise
+bash scripts/data_collection/collect_dataset.sh --noise_sigma 0.15
+```
+
+## NEW: Hydra Configuration Management
+
+The script now uses **Hydra** for flexible configuration instead of argparse:
+
+### Benefits
+
+- Hierarchical configuration with defaults and overrides
+- Easy experiment tracking
+- Type-safe configuration
+- Composition of multiple config files
+
+### Config Files
+
+- **data_collection.yaml**: Main configuration file with all parameters
+- **data_collection_no_noise.yaml**: Example variant without noise injection
+
+### Override Syntax
+
+```bash
+# Single override
+python scripts/data_collection/data_collection.py task.num_envs=4096
+
+# Multiple overrides
+python scripts/data_collection/data_collection.py \
+    task.num_envs=4096 \
+    noise.sigma=0.15 \
+    collection.len_to_save=5000000
+
+# Use custom config
+python scripts/data_collection/data_collection.py \
+    --config-name data_collection_no_noise
+```
+
+### Shell Script Integration
+
+The `collect_dataset.sh` script automatically converts arguments to Hydra overrides:
+
+```bash
+bash scripts/data_collection/collect_dataset.sh \
+    --checkpoint logs/rsl_rl/model.pt \
+    --motion_file "Data10k-open" \
+    --num_envs 2048 \
+    --no_noise
+```
+
 ## See Also
 
-- `legged_gym_dataset_gen.py`: Reference implementation for other robot types
+- `data_collection.yaml`: Main configuration file
+- `data_collection_no_noise.yaml`: Example config without noise
 - `diffuse_cloc/diffusion_policy/dataset/g1_offline_dataset.py`: Dataset loading and normalization
 - `TextOpTracker/scripts/rsl_rl/play.py`: Policy evaluation and export
 

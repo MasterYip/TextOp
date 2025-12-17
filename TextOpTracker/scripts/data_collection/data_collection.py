@@ -14,9 +14,14 @@ Required data fields (matching OfflineDataset in offline_dataset.py):
     - joint_vel: joint velocities [T, 29]
     - root_pos: root position [T, 3]
     - root_rot: root rotation (quaternion) [T, 4]
+
+Action Noise Injection:
+    Following BeyondMimic, we inject temporally correlated OU noise during rollout:
+    η_{t+1} = η_t + θ(μ - η_t)Δt + σ√Δt ε_t
+    
+    This creates state diversity and collects corrective actions for robustness.
 """
 
-import argparse
 import glob
 import os
 import sys
@@ -24,7 +29,8 @@ import time
 from pathlib import Path
 from typing import Dict
 
-import click
+import hydra
+from omegaconf import DictConfig, OmegaConf
 import numpy as np
 import torch
 from tqdm import tqdm
@@ -36,100 +42,98 @@ sys.path.append(ROOT_DIR)
 from replay_buffer import ReplayBuffer
 
 
-def create_arg_parser():
-    parser = argparse.ArgumentParser(description="Collect G1 dataset from tracking environment")
-    parser.add_argument(
-        "-o", "--output",
-        required=True,
-        help="Path to save dataset (e.g., artifacts/g1_tracking_dataset/motion.zarr)"
-    )
-    parser.add_argument(
-        "-c", "--checkpoint",
-        required=True,
-        help="Path to trained policy checkpoint"
-    )
-    parser.add_argument(
-        "-m", "--motion_file",
-        required=True,
-        help="Motion file pattern (e.g., Data10k-open)"
-    )
-    parser.add_argument(
-        "-t", "--task",
-        default="Isaac-TextOp-Tracking-G1-Direct-v0",
-        help="Task name"
-    )
-    parser.add_argument(
-        "--num_envs",
-        type=int,
-        default=100,
-        help="Number of parallel environments"
-    )
-    parser.add_argument(
-        "--min_episode_length",
-        type=int,
-        default=300,
-        help="Minimum episode length to keep (for data quality)"
-    )
-    parser.add_argument(
-        "--min_mean_reward",
-        type=float,
-        default=None,
-        help="Minimum mean reward per episode to keep (alternative quality filter)"
-    )
-    parser.add_argument(
-        "--len_to_save",
-        type=int,
-        default=500000,
-        help="Total number of timesteps to save"
-    )
-    parser.add_argument(
-        "--max_episode_length",
-        type=int,
-        default=1000,
-        help="Maximum steps per episode"
-    )
-    parser.add_argument(
-        "--chunk_length",
-        type=int,
-        default=-1,
-        help="Chunk length for zarr file, -1 for auto"
-    )
-    parser.add_argument(
-        "--seed",
-        type=int,
-        default=42,
-        help="Random seed"
-    )
-    parser.add_argument(
-        "--headless",
-        action="store_true",
-        help="Run in headless mode"
-    )
-    parser.add_argument(
-        "--visualize",
-        action="store_true",
-        help="Enable visualization"
-    )
-    parser.add_argument(
-        "--load_pickle_cfg",
-        action="store_true",
-        help="Load environment and agent config from pickle files instead of Hydra"
-    )
-    return parser
+class OUNoise:
+    """
+    Ornstein-Uhlenbeck noise generator for temporally correlated action perturbations.
+    
+    Following BeyondMimic: "Overdamped PD gains suppress high-frequency perturbations,
+    limiting state diversity. OU noise produces temporally correlated action perturbations."
+    
+    Update formula: η_{t+1} = η_t + θ(μ - η_t)Δt + σ√Δt ε_t
+    
+    Args:
+        action_dim: Dimension of action space (e.g., 29 for G1 joints)
+        theta: Mean reversion rate (default: 0.8)
+        mu: Long-term mean (default: 0.0)
+        sigma: Joint-wise noise scale (default: 0.1)
+        dt: Time step (default: 1.0)
+        device: Torch device
+    """
+    
+    def __init__(
+        self,
+        action_dim: int,
+        theta: float = 0.8,
+        mu: float = 0.0,
+        sigma: float = 0.1,
+        dt: float = 1.0,
+        device: torch.device = torch.device("cpu"),
+    ):
+        self.action_dim = action_dim
+        self.theta = theta
+        self.mu = mu
+        self.sigma = sigma
+        self.dt = dt
+        self.device = device
+        
+        # Initialize noise state
+        self.state = None
+        
+    def reset(self, batch_size: int):
+        """Reset noise state to zero (or mu)."""
+        self.state = torch.ones(batch_size, self.action_dim, device=self.device) * self.mu
+        
+    def sample(self) -> torch.Tensor:
+        """
+        Generate next noise sample using OU process.
+        
+        Returns:
+            Noise tensor [batch_size, action_dim]
+        """
+        if self.state is None:
+            raise RuntimeError("OUNoise must be reset before sampling")
+        
+        # ε_t ~ N(0, I)
+        epsilon = torch.randn_like(self.state)
+        
+        # η_{t+1} = η_t + θ(μ - η_t)Δt + σ√Δt ε_t
+        self.state = (
+            self.state
+            + self.theta * (self.mu - self.state) * self.dt
+            + self.sigma * np.sqrt(self.dt) * epsilon
+        )
+        
+        return self.state.clone()
 
 
-def collect_data(args):
-    """Main data collection loop."""
+@hydra.main(version_base=None, config_path=".", config_name="data_collection")
+def main(cfg: DictConfig):
+    """Main data collection entry point with Hydra configuration."""
+    
+    # Print configuration
+    print("="*70)
+    print("G1 Dataset Collection Configuration")
+    print("="*70)
+    print(OmegaConf.to_yaml(cfg))
+    print("="*70)
+    
+    # Run data collection
+    collect_data(cfg)
+
+
+def collect_data(cfg: DictConfig):
+    """Main data collection loop with OU noise injection."""
     
     # Import Isaac Sim related modules
     from isaaclab.app import AppLauncher
+    import argparse
     
     # Create app launcher
     app_launcher_args = argparse.Namespace(
-        headless=args.headless or not args.visualize,
+        headless=cfg.visualization.headless,
         livestream=False,
         device="cuda:0" if torch.cuda.is_available() else "cpu",
-        enable_cameras=False,
+        enable_cameras=cfg.visualization.enable_cameras,
     )
     app_launcher = AppLauncher(app_launcher_args)
     simulation_app = app_launcher.app
@@ -144,65 +148,91 @@ def collect_data(args):
     from isaaclab.utils.io.pkl import load_pickle
     
     # Try to load config using Hydra first (like play.py), fallback to pickle
-    if args.load_pickle_cfg:
-        param_dir = Path(args.checkpoint).parent / "params"
+    if cfg.checkpoint.load_pickle_cfg:
+        param_dir = Path(cfg.checkpoint.path).parent / "params"
         env_cfg = load_pickle(str(param_dir / "env.pkl"))
         agent_cfg = load_pickle(str(param_dir / "agent.pkl"))
-        # env_cfg.scene.robot.spawn.fix_base = True  # Ensure robot base is fixed
         print(f"[INFO] Successfully loaded config from pickle files")
     else:
-        env_cfg, agent_cfg = register_task_to_hydra(args.task, "rsl_rl_cfg_entry_point")
+        env_cfg, agent_cfg = register_task_to_hydra(cfg.task.name, "rsl_rl_cfg_entry_point")
         print(f"[INFO] Successfully loaded config using Hydra")
         
     
     # Update environment config
-    env_cfg.scene.num_envs = args.num_envs
+    env_cfg.scene.num_envs = cfg.task.num_envs
     
     # Set motion files
-    motion_files = glob.glob(str(Path("./artifacts") / Path(args.motion_file) / "motion.npz"))
+    motion_files = glob.glob(str(Path("./artifacts") / Path(cfg.motion.pattern) / "motion.npz"))
     if not motion_files:
-        raise FileNotFoundError(f"No motion.npz found in {Path('./artifacts') / Path(args.motion_file)}")
-    if len(motion_files) > args.num_envs:
-        print(f"[WARNING] Number of motion files ({len(motion_files)}) exceeds num_envs ({args.num_envs}), truncating for loading speed.")
-        motion_files = motion_files[:args.num_envs]
+        raise FileNotFoundError(f"No motion.npz found in {Path('./artifacts') / Path(cfg.motion.pattern)}")
+    if len(motion_files) > cfg.task.num_envs:
+        print(f"[WARNING] Number of motion files ({len(motion_files)}) exceeds num_envs ({cfg.task.num_envs}), truncating for loading speed.")
+        motion_files = motion_files[:cfg.task.num_envs]
     
     env_cfg.commands.motion.motion_files = motion_files
     
     print(f"[INFO] Using {len(motion_files)} motion files")
-    print(f"[INFO] Number of environments: {args.num_envs}")
-    print(f"[INFO] Loading checkpoint: {args.checkpoint}")
+    print(f"[INFO] Number of environments: {cfg.task.num_envs}")
+    print(f"[INFO] Loading checkpoint: {cfg.checkpoint.path}")
+    
+    # Print noise configuration
+    if cfg.noise.enable:
+        print(f"[INFO] Action noise injection ENABLED")
+        print(f"[INFO] Noise type: {cfg.noise.type}")
+        if cfg.noise.type == "ou":
+            print(f"[INFO] OU parameters: θ={cfg.noise.theta}, μ={cfg.noise.mu}, σ={cfg.noise.sigma}, Δt={cfg.noise.dt}")
+    else:
+        print(f"[INFO] Action noise injection DISABLED")
     
     # Create environment
-    env = gym.make(args.task, cfg=env_cfg, render_mode=None)
+    env = gym.make(cfg.task.name, cfg=env_cfg, render_mode=None)
     env_unwrapped = env.unwrapped
     
     # Load policy
-    log_dir = os.path.dirname(args.checkpoint)
+    log_dir = os.path.dirname(cfg.checkpoint.path)
     wrapped_env = RslRlVecEnvWrapper(env)
     
     ppo_runner = OnPolicyRunner(wrapped_env, agent_cfg.to_dict(), log_dir=None, device=agent_cfg.device)
-    ppo_runner.load(args.checkpoint)
+    ppo_runner.load(cfg.checkpoint.path)
     policy = ppo_runner.get_inference_policy(device=env_unwrapped.device)
+    
+    # Initialize noise generator if enabled
+    noise_generator = None
+    if cfg.noise.enable:
+        action_dim = env_unwrapped.action_space.shape[0]
+        if cfg.noise.type == "ou":
+            noise_generator = OUNoise(
+                action_dim=action_dim,
+                theta=cfg.noise.theta,
+                mu=cfg.noise.mu,
+                sigma=cfg.noise.sigma,
+                dt=cfg.noise.dt,
+                device=env_unwrapped.device,
+            )
+            noise_generator.reset(cfg.task.num_envs)
+            print(f"[INFO] Initialized OU noise generator for {action_dim} actions")
+        else:
+            raise ValueError(f"Unknown noise type: {cfg.noise.type}")
     
     # Initialize replay buffer
     buffer = ReplayBuffer.create_empty_numpy()
     
     # Storage for current episodes
     episode_data = {
-        "act": [[] for _ in range(args.num_envs)],
-        "body_pos": [[] for _ in range(args.num_envs)],
-        "body_rot": [[] for _ in range(args.num_envs)],
-        "body_lin_vel": [[] for _ in range(args.num_envs)],
-        "body_ang_vel": [[] for _ in range(args.num_envs)],
-        "joint_pos": [[] for _ in range(args.num_envs)],
-        "joint_vel": [[] for _ in range(args.num_envs)],
-        "root_pos": [[] for _ in range(args.num_envs)],
-        "root_rot": [[] for _ in range(args.num_envs)],
+        "act": [[] for _ in range(cfg.task.num_envs)],
+        "body_pos": [[] for _ in range(cfg.task.num_envs)],
+        "body_rot": [[] for _ in range(cfg.task.num_envs)],
+        "body_lin_vel": [[] for _ in range(cfg.task.num_envs)],
+        "body_ang_vel": [[] for _ in range(cfg.task.num_envs)],
+        "joint_pos": [[] for _ in range(cfg.task.num_envs)],
+        "joint_vel": [[] for _ in range(cfg.task.num_envs)],
+        "root_pos": [[] for _ in range(cfg.task.num_envs)],
+        "root_rot": [[] for _ in range(cfg.task.num_envs)],
     }
     
     # Track episode statistics for quality filtering
-    episode_lengths = np.zeros(args.num_envs, dtype=np.int32)
-    episode_rewards = np.zeros(args.num_envs, dtype=np.float32)
+    episode_lengths = np.zeros(cfg.task.num_envs, dtype=np.int32)
+    episode_rewards = np.zeros(cfg.task.num_envs, dtype=np.float32)
     
     # Statistics tracking
     total_saved_steps = 0
@@ -213,19 +243,26 @@ def collect_data(args):
     obs, _ = wrapped_env.get_observations()
     
     print(f"[INFO] Starting data collection...")
-    print(f"[INFO] Target: {args.len_to_save} timesteps")
-    print(f"[INFO] Quality filter: min_episode_length={args.min_episode_length}")
-    if args.min_mean_reward is not None:
-        print(f"[INFO] Quality filter: min_mean_reward={args.min_mean_reward}")
+    print(f"[INFO] Target: {cfg.collection.len_to_save} timesteps")
+    print(f"[INFO] Quality filter: min_episode_length={cfg.collection.min_episode_length}")
+    if cfg.collection.min_mean_reward is not None:
+        print(f"[INFO] Quality filter: min_mean_reward={cfg.collection.min_mean_reward}")
     
-    pbar = tqdm(total=args.len_to_save, desc="Collecting data")
+    pbar = tqdm(total=cfg.collection.len_to_save, desc="Collecting data")
     # Import extract_robot_state from textop_tracker for consistency
     from textop_tracker.tasks.tracking.mdp.observations import extract_robot_state
 
     with torch.inference_mode():
-        while total_saved_steps < args.len_to_save and simulation_app.is_running():
+        while total_saved_steps < cfg.collection.len_to_save and simulation_app.is_running():
             # Get action from policy
             actions = policy(obs)
+            
+            # Apply action noise if enabled
+            if noise_generator is not None:
+                noise = noise_generator.sample()
+                actions = actions + noise
+                # Optionally clip actions to valid range
+                # actions = torch.clamp(actions, -1.0, 1.0)
             
             # Extract robot state before step (returns tensors)
             robot_state = extract_robot_state(env_unwrapped)
@@ -237,7 +274,7 @@ def collect_data(args):
             }
             
             # Store current state and action for all envs
-            for env_idx in range(args.num_envs):
+            for env_idx in range(cfg.task.num_envs):
                 episode_data["act"][env_idx].append(actions[env_idx].cpu().numpy())
                 episode_data["body_pos"][env_idx].append(robot_state_np["body_pos"][env_idx])
                 episode_data["body_rot"][env_idx].append(robot_state_np["body_rot"][env_idx])
@@ -270,11 +307,11 @@ def collect_data(args):
                     keep_episode = True
                     
                     # Filter by episode length
-                    if ep_length < args.min_episode_length:
+                    if ep_length < cfg.collection.min_episode_length:
                         keep_episode = False
                     
                     # Filter by mean reward (if specified)
-                    if args.min_mean_reward is not None and mean_reward < args.min_mean_reward:
+                    if cfg.collection.min_mean_reward is not None and mean_reward < cfg.collection.min_mean_reward:
                         keep_episode = False
                     
                     if keep_episode and len(episode_data["act"][env_idx]) > 0:
@@ -302,9 +339,14 @@ def collect_data(args):
                         episode_data[key][env_idx] = []
                     episode_lengths[env_idx] = 0
                     episode_rewards[env_idx] = 0
+                    
+                    # Reset noise for finished environments if noise is enabled
+                    if noise_generator is not None:
+                        # Only reset noise for this specific environment
+                        noise_generator.state[env_idx] = noise_generator.mu
             
             # Stop if we have enough data
-            if total_saved_steps >= args.len_to_save:
+            if total_saved_steps >= cfg.collection.len_to_save:
                 break
     
     pbar.close()
@@ -317,38 +359,47 @@ def collect_data(args):
     print(f"[INFO] Episode retention rate: {total_episodes_saved/max(total_episodes_collected,1)*100:.1f}%")
     
     # Save dataset
-    output_dir = os.path.dirname(args.output)
+    output_path = os.path.join(cfg.output.dir, cfg.output.zarr_name)
+    output_dir = os.path.dirname(output_path)
     os.makedirs(output_dir, exist_ok=True)
     
-    print(f"[INFO] Saving dataset to {args.output}")
+    print(f"[INFO] Saving dataset to {output_path}")
     
     # Set chunk length
-    chunk_length = args.chunk_length if args.chunk_length > 0 else None
+    chunk_length = cfg.output.chunk_length if cfg.output.chunk_length > 0 else None
     
     # Save with optimal compression for disk storage
     buffer.save_to_path(
-        args.output,
+        output_path,
         chunks={'act': None, 'body_pos': None, 'body_rot': None,
                 'body_lin_vel': None, 'body_ang_vel': None,
                 'joint_pos': None, 'joint_vel': None,
                 'root_pos': None, 'root_rot': None} if chunk_length is None else {},
-        compressors='disk',  # Use zstd compression for better disk storage
+        compressors=cfg.output.compressor,
     )
     
     # Save metadata
     metadata = {
-        'task': args.task,
-        'checkpoint': args.checkpoint,
-        'motion_file': args.motion_file,
-        'num_envs': int(args.num_envs),
-        'min_episode_length': int(args.min_episode_length),
-        'min_mean_reward': float(args.min_mean_reward) if args.min_mean_reward is not None else None,
-        'len_to_save': int(args.len_to_save),
+        'task': cfg.task.name,
+        'checkpoint': cfg.checkpoint.path,
+        'motion_pattern': cfg.motion.pattern,
+        'num_envs': int(cfg.task.num_envs),
+        'min_episode_length': int(cfg.collection.min_episode_length),
+        'min_mean_reward': float(cfg.collection.min_mean_reward) if cfg.collection.min_mean_reward is not None else None,
+        'len_to_save': int(cfg.collection.len_to_save),
         'total_episodes_collected': int(total_episodes_collected),
         'total_episodes_saved': int(total_episodes_saved),
         'total_timesteps': int(total_saved_steps),
         'n_episodes': int(buffer.n_episodes),
-        'seed': int(args.seed),
+        'seed': int(cfg.task.seed),
+        'noise_enabled': cfg.noise.enable,
+        'noise_type': cfg.noise.type if cfg.noise.enable else None,
+        'noise_params': {
+            'theta': cfg.noise.theta,
+            'mu': cfg.noise.mu,
+            'sigma': cfg.noise.sigma,
+            'dt': cfg.noise.dt,
+        } if cfg.noise.enable and cfg.noise.type == "ou" else None,
         'creation_time': time.strftime("%Y-%m-%d %H:%M:%S")
     }
     
@@ -368,7 +419,4 @@ def collect_data(args):
 
 
 if __name__ == "__main__":
-    parser = create_arg_parser()
-    args = parser.parse_args()
-    
-    collect_data(args)
+    main()
