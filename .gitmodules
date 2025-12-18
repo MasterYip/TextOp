@@ -6,4 +6,4 @@
 	url = git@github.com:unitreerobotics/unitree_ros2.git
 [submodule "diffuse_cloc"]
 	path = diffuse_cloc
-	url = https://github.com/MasterYip/DiffuseCLOC_dp_impl.git
+	url = https://github.com/MasterYip/pdplanner.git
