@@ -23,7 +23,7 @@ from isaaclab.app import AppLauncher
 parser = argparse.ArgumentParser(description="Replay converted motions with multiple environments.")
 parser.add_argument("--motion_file", type=str, default=None, help="Single motion file name (deprecated, use --motion_pattern)")
 parser.add_argument("--motion_pattern", type=str, default=None, help="Glob pattern for motion files (e.g., 'lafan_*' or '*')")
-parser.add_argument("--max_envs", type=int, default=20, help="Maximum number of environments to create")
+parser.add_argument("--max_envs", type=int, default=200, help="Maximum number of environments to create")
 
 # append AppLauncher cli args
 AppLauncher.add_app_launcher_args(parser)
@@ -106,9 +106,6 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene, mot
     motion_names = [Path(f).parent.name for f in motion_files]
     
     try:
-        import omni.ui as ui
-        from pxr import UsdGeom, Gf
-        
         stage = sim.stage
         for env_idx in range(num_envs):
             # Create text prim path
@@ -228,7 +225,7 @@ def main():
     sim = SimulationContext(sim_cfg)
 
     # Create scene with num_envs matching number of motions
-    scene_cfg = ReplayMotionsSceneCfg(num_envs=num_envs, env_spacing=2.0)
+    scene_cfg = ReplayMotionsSceneCfg(num_envs=num_envs, env_spacing=3.0)
     scene = InteractiveScene(scene_cfg)
     sim.reset()
     
