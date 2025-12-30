@@ -7,3 +7,6 @@
 [submodule "diffuse_cloc"]
 	path = diffuse_cloc
 	url = https://github.com/MasterYip/pdplanner.git
+[submodule "MotionCLIP"]
+	path = MotionCLIP
+	url = https://github.com/MasterYip/MotionCLIP.git
