@@ -7,7 +7,8 @@ Handles different pose representations (xyz, rot6d, posquat, posvel).
 
 import torch
 import numpy as np
-from pytorch3d import transforms as geometry
+# from pytorch3d import transforms as geometry
+from motionclip import geometry
 
 
 class G1MotionConverter:

@@ -7,7 +7,7 @@ input:
   
 # MotionCLIP model configuration
 motionclip:
-  checkpoint_path: "../../../MotionCLIP/exps/g1-model-posquat/checkpoint_0100.pth.tar"
+  checkpoint_path: "../../../MotionCLIP/exps/g1-model-xyz/checkpoint_0100.pth.tar"
   device: "cuda"  # 'cuda' or 'cpu'
   
 # Motion encoding configuration
@@ -24,7 +24,7 @@ encoding:
   
   # Pose representation used by the model
   # Options: 'xyz', 'rot6d', 'posquat', 'posvel'
-  pose_rep: 'posquat'
+  pose_rep: 'xyz'
   
   # Whether model uses translation
   translation: true

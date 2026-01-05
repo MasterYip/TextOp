@@ -32,6 +32,7 @@ from src.utils.get_model_and_data import get_motion_clip
 
 # Import local utilities
 from motion_converter import G1MotionConverter, extract_motion_window, create_motion_batches
+from replay_buffer import ReplayBuffer
 
 
 class MotionDataDyer:
@@ -98,18 +99,20 @@ class MotionDataDyer:
         if not os.path.exists(self.cfg.input.zarr_path):
             raise FileNotFoundError(f"Dataset not found: {self.cfg.input.zarr_path}")
         
-        self.zarr_root = zarr.open(self.cfg.input.zarr_path, mode='r')
+        # Load using ReplayBuffer (same as data_collection.py)
+        self.buffer = ReplayBuffer.copy_from_path(self.cfg.input.zarr_path)
         
         # Get dataset info
-        self.total_frames = self.zarr_root['body_pos'].shape[0]
+        self.total_frames = self.buffer.n_steps
         
         print(f"  Total frames: {self.total_frames}")
-        print(f"  Fields: {list(self.zarr_root.keys())}")
+        print(f"  Total episodes: {self.buffer.n_episodes}")
+        print(f"  Fields: {list(self.buffer.data.keys())}")
         
         # Check required fields
         required_fields = ['body_pos', 'body_rot']
         for field in required_fields:
-            if field not in self.zarr_root:
+            if field not in self.buffer.data:
                 raise ValueError(f"Required field '{field}' not found in dataset")
         
         print(f"  Dataset loaded successfully!")
@@ -193,17 +196,17 @@ class MotionDataDyer:
     
     def _extract_window(self, center_idx):
         """Extract motion window for a specific frame."""
-        # Create data dict from zarr
+        # Create data dict from buffer
         data_dict = {
-            'body_pos': self.zarr_root['body_pos'][:],
-            'body_rot': self.zarr_root['body_rot'][:],
+            'body_pos': self.buffer['body_pos'][:],
+            'body_rot': self.buffer['body_rot'][:],
         }
         
         # Add optional fields if available
-        if 'body_lin_vel' in self.zarr_root:
-            data_dict['body_lin_vel'] = self.zarr_root['body_lin_vel'][:]
-        if 'body_ang_vel' in self.zarr_root:
-            data_dict['body_ang_vel'] = self.zarr_root['body_ang_vel'][:]
+        if 'body_lin_vel' in self.buffer.data:
+            data_dict['body_lin_vel'] = self.buffer['body_lin_vel'][:]
+        if 'body_ang_vel' in self.buffer.data:
+            data_dict['body_ang_vel'] = self.buffer['body_ang_vel'][:]
         
         # Extract window
         window_data = extract_motion_window(
@@ -224,51 +227,62 @@ class MotionDataDyer:
         output_dir = os.path.dirname(self.cfg.output.zarr_path)
         os.makedirs(output_dir, exist_ok=True)
         
-        # Check if overwriting input
-        if self.cfg.output.zarr_path == self.cfg.input.zarr_path:
-            print(f"  WARNING: Overwriting input dataset!")
-            mode = 'r+'
-            output_root = self.zarr_root
-        else:
-            mode = 'w'
-            output_root = zarr.open(self.cfg.output.zarr_path, mode=mode)
-            
-            # Copy existing data
-            print(f"  Copying existing data...")
-            for key in tqdm(self.zarr_root.keys(), desc="Copying fields"):
-                output_root[key] = self.zarr_root[key][:]
-        
-        # Add or overwrite latent field
+        # Add latent field to buffer's data
         latent_field = self.cfg.output.latent_field_name
         
-        if latent_field in output_root:
+        # Check if field exists
+        if latent_field in self.buffer.data:
             if self.cfg.output.overwrite:
                 print(f"  Overwriting existing '{latent_field}' field...")
-                del output_root[latent_field]
+                # Delete from buffer if using zarr backend
+                if self.buffer.backend == 'zarr':
+                    del self.buffer.data[latent_field]
             else:
                 raise ValueError(f"Field '{latent_field}' already exists. Set overwrite=true to replace.")
         
         print(f"  Adding '{latent_field}' field...")
         
-        # Set compression
-        if self.cfg.output.compressor == 'blosc':
-            from numcodecs import Blosc
-            compressor = Blosc(cname='zstd', clevel=5, shuffle=Blosc.BITSHUFFLE)
-        elif self.cfg.output.compressor == 'default':
-            compressor = 'default'
+        # Add latent field to buffer's data dict
+        if self.buffer.backend == 'numpy':
+            self.buffer.data[latent_field] = latents
         else:
-            compressor = None
+            # For zarr backend, we need to add it to the data group
+            # Set compression
+            if self.cfg.output.compressor == 'blosc':
+                from numcodecs import Blosc
+                compressor = Blosc(cname='zstd', clevel=5, shuffle=Blosc.BITSHUFFLE)
+            elif self.cfg.output.compressor == 'default':
+                compressor = ReplayBuffer.resolve_compressor('default')
+            else:
+                compressor = None
+            
+            self.buffer.data.array(
+                latent_field,
+                latents,
+                chunks=(1000, latents.shape[1]),
+                dtype=np.float32,
+                compressor=compressor
+            )
         
-        output_root.array(
-            latent_field,
-            latents,
-            chunks=(1000, latents.shape[1]),
-            dtype=np.float32,
-            compressor=compressor
+        # Save buffer to output path
+        print(f"  Saving buffer to disk...")
+        
+        # Set compression for saving
+        compressor_dict = {latent_field: self.cfg.output.compressor}
+        if self.cfg.output.compressor == 'blosc':
+            compressor_dict = {latent_field: 'disk'}  # Use 'disk' for high compression
+        
+        self.buffer.save_to_path(
+            self.cfg.output.zarr_path,
+            compressors=compressor_dict,
+            if_exists='replace'
         )
         
         print(f"  Dataset saved successfully!")
-        print(f"  Total size: {os.path.getsize(self.cfg.output.zarr_path) / 1024**2:.2f} MB")
+        if os.path.exists(self.cfg.output.zarr_path):
+            # Calculate directory size for zarr
+            total_size = sum(f.stat().st_size for f in Path(self.cfg.output.zarr_path).rglob('*') if f.is_file())
+            print(f"  Total size: {total_size / 1024**2:.2f} MB")
         
         # Print summary
         print("\n" + "="*80)
@@ -277,6 +291,7 @@ class MotionDataDyer:
         print(f"Input dataset: {self.cfg.input.zarr_path}")
         print(f"Output dataset: {self.cfg.output.zarr_path}")
         print(f"Total frames: {self.total_frames}")
+        print(f"Total episodes: {self.buffer.n_episodes}")
         print(f"Latent field: '{latent_field}' with shape {latents.shape}")
         print(f"Latent dim: {latents.shape[1]}")
         print("="*80)

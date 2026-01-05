@@ -120,6 +120,12 @@ python data_dyeing.py \
   output.zarr_path=../../outputs/collected_data/motion_dataset_dyed.zarr
 ```
 
+```bash
+python data_dyeing.py \
+  input.zarr_path=../../artifacts/g1_multimotion_noise_median/motion.zarr \
+  output.zarr_path=../../artifacts/g1_multimotion_noise_median/motion_dyed.zarr
+```
+
 ### 3. Verify Output
 ```python
 import zarr
