@@ -145,9 +145,6 @@ def bad_motion_body_pos_z_only(
 def motion_terminate(env: ManagerBasedRLEnv, command_name: str) -> torch.Tensor:
     # Terminate if at the end of the motion
     command = env.command_manager.get_term(command_name)
-    reset_idx = command.motion_end_reset_env_idx.clone() if command.cfg.motion_end_reset else None
-    command.motion_end_reset_env_idx = None
-    if reset_idx is not None and reset_idx.numel() > 0:
-        return reset_idx
-    else:
-        return torch.zeros(env.num_envs, dtype=torch.bool, device=env.device)
+    reset_idx = command.motion_end_reset_env_idx.clone()
+    command.motion_end_reset_env_idx = torch.zeros(env.num_envs, dtype=torch.bool, device=env.device)
+    return reset_idx

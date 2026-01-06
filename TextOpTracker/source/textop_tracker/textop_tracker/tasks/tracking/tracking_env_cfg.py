@@ -521,6 +521,7 @@ class TerminationsCfg:
         params={
             "command_name": "motion",
         },
+        time_out=True
     )
     # overboundary = DoneTerm(
     #     func=mdp.joint_pos_out_of_limit_cond_on_pfail,

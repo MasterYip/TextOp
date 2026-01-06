@@ -13,15 +13,16 @@ output:
 
 # Task and environment configuration
 task:
-  name: "Tracking-Flat-G1-ProjGravObs-MNMLP-v0"
-  num_envs: 4096
+  # name: "Tracking-Flat-G1-ProjGravObs-MNMLP-v0"
+  name: "Tracking-Flat-G1-ProjGravObs-MNMLP-CollectData-v0"
+  num_envs: 1536
   # max_episode_length: 1000 # unused
   seed: 42
 
 # Policy checkpoint
 checkpoint:
   path: "logs/rsl_rl/Pretrained/checkpoints/model_75000.pt"
-  load_pickle_cfg: true  # Load env/agent config from pickle files
+  load_pickle_cfg: false  # Load env/agent config from pickle files
 
 # Motion data source
 motion:
@@ -30,7 +31,7 @@ motion:
 
 # Data collection settings
 collection:
-  len_to_save: 4000000  # Total timesteps to collect
+  len_to_save: 1000000  # Total timesteps to collect
   min_episode_length: 300  # Minimum episode length for quality filter
   min_mean_reward: null  # Optional: minimum mean reward per episode
 

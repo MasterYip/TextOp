@@ -1,9 +1,11 @@
 from isaaclab.utils import configclass
+from dataclasses import MISSING
 
 from textop_tracker.robots.g1 import G1_ACTION_SCALE, G1_CYLINDER_CFG
 from textop_tracker.tasks.tracking.config.g1.agents.rsl_rl_ppo_cfg import LOW_FREQ_SCALE
 from textop_tracker.tasks.tracking.tracking_env_cfg import TrackingEnvCfg, PrivPrivObservationsCfg, PropPropObservationsCfg, NoisePrivObservationsCfg, ProjGravObservationsCfg
-
+from isaaclab.managers import TerminationTermCfg as DoneTerm
+import textop_tracker.tasks.tracking.mdp as mdp
 
 @configclass
 class G1FlatEnvCfg(TrackingEnvCfg):
@@ -72,7 +74,15 @@ class G1FlatProjGravObsEnvCfg_MotionEndReset(G1FlatProjGravObsEnvCfg):
         super().__post_init__()
         # Enable motion end reset (episode resets when motion sequence ends)
         self.commands.motion.motion_end_reset = True
-
+        self.terminations = self.terminations.replace(
+            anchor_pos=DoneTerm(func=mdp.bad_anchor_pos_z_only,
+                                params={
+                                    "command_name": "motion",
+                                    "threshold": 0.5
+                                }),
+            anchor_ori=None,
+            ee_body_pos=None,
+        )
 
 @configclass
 class G1FlatProjGravObsEnvCfg_LargeHand(G1FlatProjGravObsEnvCfg):
