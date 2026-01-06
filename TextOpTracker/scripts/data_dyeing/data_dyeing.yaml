@@ -20,7 +20,7 @@ encoding:
   boundary_mode: 'pad'
   
   # Batch size for encoding (larger = faster but more memory)
-  batch_size: 128
+  batch_size: 2048
   
   # Pose representation used by the model
   # Options: 'xyz', 'rot6d', 'posquat', 'posvel'

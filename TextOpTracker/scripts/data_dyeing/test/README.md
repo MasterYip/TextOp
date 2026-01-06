@@ -25,7 +25,8 @@ cd TextOpTracker/scripts/data_dyeing/test
 
 python dyed_data_vis.py \
     --zarr_path ../../../artifacts/g1_multimotion_noise_median/motion_dyed.zarr \
-    --checkpoint ../../../../MotionCLIP/exps/g1-model-xyz/checkpoint_0100.pth.tar
+    --checkpoint ../../../../MotionCLIP/exps/g1-model-xyz/checkpoint_0100.pth.tar \ 
+    --episodes-range 0 10
 ```
 
 ### Advanced Options

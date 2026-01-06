@@ -3,6 +3,9 @@
 
 - 20260106 DataCollection Episode is not continuous
 
+## TODO
+
+- 20260106 Double Check DataDyeing Script
 
 ## Prompt
 

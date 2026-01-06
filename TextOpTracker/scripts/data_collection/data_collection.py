@@ -307,8 +307,8 @@ def collect_data(cfg: DictConfig):
                     # Apply quality filters
                     keep_episode = True
                     
-                    # Filter by episode length: If episode terminated early and is shorter than min length, discard
-                    if not infos["time_outs"][env_idx] and ep_length < cfg.collection.min_episode_length:
+                    # Filter by episode length: If is shorter than min length, discard
+                    if ep_length < cfg.collection.min_episode_length:
                         keep_episode = False
                     
                     # Filter by mean reward (if specified)

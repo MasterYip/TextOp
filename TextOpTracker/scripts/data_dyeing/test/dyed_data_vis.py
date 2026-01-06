@@ -47,7 +47,7 @@ from body_index_mapping import remap_isaaclab_to_motionclip
 def load_vocabulary_categories(yaml_path=None):
     """Load vocabulary categories for text predictions."""
     if yaml_path is None:
-        yaml_path = MOTIONCLIP_DIR / "src/test/t-sne/categories_simple.yaml"
+        yaml_path = SCRIPT_DIR / "categories.yaml"
     
     with open(yaml_path, 'r') as f:
         config = yaml.safe_load(f)
@@ -63,7 +63,7 @@ def load_vocabulary_categories(yaml_path=None):
 def load_motion_categories(yaml_path=None):
     """Load motion categories for t-SNE reference points."""
     if yaml_path is None:
-        yaml_path = MOTIONCLIP_DIR / "src/test/t-sne/categories_simple.yaml"
+        yaml_path = SCRIPT_DIR / "categories.yaml"
     
     with open(yaml_path, 'r') as f:
         config = yaml.safe_load(f)
@@ -410,8 +410,10 @@ def main():
                        help='Path to MotionCLIP checkpoint')
     parser.add_argument('--config', type=str, default=None,
                        help='Path to config YAML (optional)')
-    parser.add_argument('--episode', type=int, default=0,
-                       help='Episode index to visualize (default: 0)')
+    parser.add_argument('--episode', type=int, nargs='+', default=[100],
+                       help='Episode index(es) to visualize. Can specify multiple: --episode 0 1 2 (default: [100])')
+    parser.add_argument('--episodes-range', type=int, nargs=2, metavar=('START', 'END'),
+                       help='Range of episodes to visualize (e.g., --episodes-range 0 10 for episodes 0-9)')
     parser.add_argument('--device', type=str, default='cuda',
                        help='Device to use (cuda or cpu)')
     parser.add_argument('--fps', type=int, default=30,
@@ -420,6 +422,14 @@ def main():
                        help='Output directory (default: current script dir)')
     
     args = parser.parse_args()
+    
+    # Determine which episodes to visualize
+    if args.episodes_range:
+        episodes = list(range(args.episodes_range[0], args.episodes_range[1]))
+        print(f"Visualizing episodes {args.episodes_range[0]} to {args.episodes_range[1]-1} ({len(episodes)} total)")
+    else:
+        episodes = args.episode if isinstance(args.episode, list) else [args.episode]
+        print(f"Visualizing {len(episodes)} episode(s): {episodes}")
     
     # Set output directory
     if args.output_dir:
@@ -479,27 +489,55 @@ def main():
     print("\n" + "="*80)
     print("DYED DATA VISUALIZATION")
     print("="*80)
+
+    # Validate episode indices
+    max_episode_idx = visualizer.buffer.n_episodes - 1
+    invalid_episodes = [ep for ep in episodes if ep > max_episode_idx]
+    if invalid_episodes:
+        print(f"\n[WARNING] Invalid episode indices (max={max_episode_idx}): {invalid_episodes}")
+        episodes = [ep for ep in episodes if ep <= max_episode_idx]
+        print(f"[WARNING] Continuing with valid episodes: {episodes}")
     
-    # 1. Real-time text prediction visualization
-    video_path = output_dir / f"episode_{args.episode}_realtime.gif"
-    visualizer.visualize_episode_with_text(
-        episode_idx=args.episode,
-        output_path=video_path,
-        fps=args.fps
-    )
+    if not episodes:
+        print("\n[ERROR] No valid episodes to visualize!")
+        return
     
-    # 2. t-SNE trajectory visualization
-    tsne_path = output_dir / f"episode_{args.episode}_tsne.png"
-    visualizer.visualize_tsne_trajectory(
-        episode_idx=args.episode,
-        output_path=tsne_path
-    )
+    # Run visualizations for all episodes
+    print("\n" + "="*80)
+    print(f"DYED DATA VISUALIZATION - {len(episodes)} EPISODE(S)")
+    print("="*80)
+    
+    all_videos = []
+    all_tsne = []
+    
+    for i, episode_idx in enumerate(episodes, 1):
+        print(f"\n[{i}/{len(episodes)}] Processing Episode {episode_idx}...")
+        
+        # 1. Real-time text prediction visualization
+        video_path = output_dir / f"episode_{episode_idx}_realtime.gif"
+        visualizer.visualize_episode_with_text(
+            episode_idx=episode_idx,
+            output_path=video_path,
+            fps=args.fps
+        )
+        all_videos.append(video_path)
+        
+        # 2. t-SNE trajectory visualization
+        tsne_path = output_dir / f"episode_{episode_idx}_tsne.png"
+        visualizer.visualize_tsne_trajectory(
+            episode_idx=episode_idx,
+            output_path=tsne_path
+        )
+        all_tsne.append(tsne_path)
     
     print("\n" + "="*80)
     print("ALL VISUALIZATIONS COMPLETE!")
     print("="*80)
-    print(f"Video: {video_path}")
-    print(f"t-SNE: {tsne_path}")
+    print(f"\nGenerated {len(episodes)} episode visualizations:")
+    for video_path, tsne_path in zip(all_videos, all_tsne):
+        print(f"\n  Episode {video_path.stem.split('_')[1]}:")
+        print(f"    Video: {video_path}")
+        print(f"    t-SNE: {tsne_path}")
 
 
 if __name__ == '__main__':
