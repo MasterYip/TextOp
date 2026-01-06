@@ -74,15 +74,15 @@ class G1FlatProjGravObsEnvCfg_MotionEndReset(G1FlatProjGravObsEnvCfg):
         super().__post_init__()
         # Enable motion end reset (episode resets when motion sequence ends)
         self.commands.motion.motion_end_reset = True
-        self.terminations = self.terminations.replace(
-            anchor_pos=DoneTerm(func=mdp.bad_anchor_pos_z_only,
-                                params={
-                                    "command_name": "motion",
-                                    "threshold": 0.5
-                                }),
-            anchor_ori=None,
-            ee_body_pos=None,
-        )
+        # self.terminations = self.terminations.replace(
+        #     anchor_pos=DoneTerm(func=mdp.bad_anchor_pos_z_only,
+        #                         params={
+        #                             "command_name": "motion",
+        #                             "threshold": 0.5
+        #                         }),
+        #     anchor_ori=None,
+        #     ee_body_pos=None,
+        # )
 
 @configclass
 class G1FlatProjGravObsEnvCfg_LargeHand(G1FlatProjGravObsEnvCfg):
