@@ -1,8 +1,12 @@
 """
 Visualization utilities for G1 motion data.
+
+Note: Expects body positions in MotionCLIP ordering (semantic).
+If you have IsaacLab ordering (alphabetical), use body_index_mapping.remap_isaaclab_to_motionclip first.
 """
 
 import numpy as np
+from body_index_mapping import remap_isaaclab_to_motionclip
 
 
 # G1 Robot kinematic chain (30 bodies)
@@ -21,11 +25,19 @@ colors_blue = ["#4D84AA", "#5B9965", "#61CEB9", "#34C1E2", "#80B79A"]
 class G1MotionVisualizer:
     """
     Visualizer for G1 robot motion using matplotlib 3D.
+    
+    Note: Expects body positions in MotionCLIP ordering (semantic).
+    Set auto_remap=True to automatically convert from IsaacLab ordering.
     """
     
-    def __init__(self):
+    def __init__(self, auto_remap=False):
+        """
+        Args:
+            auto_remap: If True, automatically remap from IsaacLab to MotionCLIP ordering
+        """
         self.kinematic_tree = g1_kinematic_chain
         self.colors = colors_blue
+        self.auto_remap = auto_remap
     
     def draw_frame(self, ax, body_positions, frame_idx):
         """
@@ -35,7 +47,16 @@ class G1MotionVisualizer:
             ax: Matplotlib 3D axes
             body_positions: Body positions array [T, 30, 3]
             frame_idx: Frame index to draw
+        
+        Note:
+            If auto_remap=True, body_positions is assumed to be in IsaacLab order
+            and will be automatically remapped to MotionCLIP order.
         """
+        # Remap if needed
+        if self.auto_remap:
+            data_dict = {'body_pos': body_positions}
+            data_dict = remap_isaaclab_to_motionclip(data_dict)
+            body_positions = data_dict['body_pos']
         # Extract positions for current frame
         positions_world = body_positions[frame_idx]  # (30, 3)
         

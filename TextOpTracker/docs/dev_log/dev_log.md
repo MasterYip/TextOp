@@ -13,3 +13,9 @@ I hope to visualize the dyed data in such way in #file:dyed_data_vis.py  (if nee
 1. load the dyed zarr dataset, sample a episode data (motion sequence), then visualize the g1 data using the same way like #file:motion2text.py . The different is, I hope you display the most likely motion (and confidence) in realtime during the motion. About how to get the most likely motion text see #file:visualize.py  and #file:motion2text.py 
 2. Prepare motion samples like #file:motionclip_tsne.py , and do tSNE for the samples latent to construct a dim-reducted space. Then we can project the motion_latent of the dyed data into this space, and the motion sequence may form a trajectory in the dim-reducted space, I hope you draw it out (with other motion sample points to reflect the semantic of the zone)
 3. you can import motionclip as a package to call the needed functions, note to expose the entry in #file:__init__.py 
+
+Fix bug:
+I notice a important bug: the body position ordering is different between #file:data_collection.py  and motion clip. So for #file:data_dyeing.py  and #file:dyed_data_vis.py , They all need to remap body indice and joint indice before putting into motion clip.
+
+For MotionCLIP side, the order can be found in #file:g1_amass_utils.py 
+For TeleOP side, I think the order are put in alphabet order.

@@ -41,6 +41,7 @@ from motionclip import get_motion_clip, get_motion_text_mapping, retrieve_motion
 # Import local utilities
 from replay_buffer import ReplayBuffer
 from visualize_utils import G1MotionVisualizer
+from body_index_mapping import remap_isaaclab_to_motionclip
 
 
 def load_vocabulary_categories(yaml_path=None):
@@ -114,8 +115,8 @@ class DyedDataVisualizer:
             self.text_features = self.model.clip_model.encode_text(text_tokens).float()
             self.text_features_norm = self.text_features / self.text_features.norm(dim=-1, keepdim=True)
         
-        # Initialize G1 visualizer
-        self.motion_viz = G1MotionVisualizer()
+        # Initialize G1 visualizer (auto-remap from IsaacLab to MotionCLIP order)
+        self.motion_viz = G1MotionVisualizer(auto_remap=True)
     
     def predict_text_from_latent(self, motion_latent, top_k=5):
         """

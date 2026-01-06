@@ -3,12 +3,16 @@ Motion format converter for MotionCLIP encoding.
 
 Converts G1 motion data from IsaacLab format to MotionCLIP input format.
 Handles different pose representations (xyz, rot6d, posquat, posvel).
+
+IMPORTANT: Automatically handles body/joint index remapping from IsaacLab (alphabetical)
+to MotionCLIP (semantic) ordering.
 """
 
 import torch
 import numpy as np
 # from pytorch3d import transforms as geometry
 from motionclip import geometry
+from body_index_mapping import remap_isaaclab_to_motionclip
 
 
 class G1MotionConverter:
@@ -46,17 +50,37 @@ class G1MotionConverter:
         Convert motion data to MotionCLIP format.
         
         Args:
-            body_pos: [seq_len, 30, 3] - body positions
-            body_rot: [seq_len, 30, 4] - body rotations (quaternions)
-            body_lin_vel: [seq_len, 30, 3] - body linear velocities (optional)
-            body_ang_vel: [seq_len, 30, 3] - body angular velocities (optional)
+            body_pos: [seq_len, 30, 3] - body positions (IsaacLab order)
+            body_rot: [seq_len, 30, 4] - body rotations in quaternions (IsaacLab order)
+            body_lin_vel: [seq_len, 30, 3] - body linear velocities (IsaacLab order, optional)
+            body_ang_vel: [seq_len, 30, 3] - body angular velocities (IsaacLab order, optional)
             
         Returns:
-            Tensor in MotionCLIP format: [30, feat_dim, seq_len]
+            Tensor in MotionCLIP format: [30, feat_dim, seq_len] (MotionCLIP order)
+        
+        Note:
+            This function automatically remaps body indices from IsaacLab (alphabetical)
+            to MotionCLIP (semantic) ordering before processing.
         """
         # Convert to torch tensors
         body_pos = self._to_torch(body_pos)  # [T, 30, 3]
         body_rot = self._to_torch(body_rot)  # [T, 30, 4]
+        
+        # CRITICAL: Remap from IsaacLab order to MotionCLIP order
+        data_dict = {
+            'body_pos': body_pos,
+            'body_rot': body_rot,
+        }
+        if body_lin_vel is not None:
+            data_dict['body_lin_vel'] = self._to_torch(body_lin_vel)
+        if body_ang_vel is not None:
+            data_dict['body_ang_vel'] = self._to_torch(body_ang_vel)
+        
+        data_dict = remap_isaaclab_to_motionclip(data_dict, inplace=True)
+        
+        # Extract remapped data
+        body_pos = data_dict['body_pos']  # [T, 30, 3] - now in MotionCLIP order
+        body_rot = data_dict['body_rot']  # [T, 30, 4] - now in MotionCLIP order
         
         # Center at root body position of first frame
         body_pos = body_pos - body_pos[0, 0, :]  # [T, 30, 3]
