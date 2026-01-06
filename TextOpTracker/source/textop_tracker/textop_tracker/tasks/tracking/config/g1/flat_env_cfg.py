@@ -45,7 +45,24 @@ class G1FlatWoStateEstimationEnvCfg(G1FlatEnvCfg):
 @configclass
 class G1FlatProjGravObsEnvCfg(G1FlatEnvCfg):
     observations: ProjGravObservationsCfg = ProjGravObservationsCfg()
+    def __post_init__(self):
+        super().__post_init__()
+        # Align reward weights and pfail_thresholds to match the pretrained checkpoint (env.yaml)
+        # These values differ from the base TrackingEnvCfg defaults
+        
+        # Reward weight adjustments
+        self.rewards.feet_slide.weight = -0.3  # vs -0.1 in base
+        self.rewards.soft_landing.weight = -0.0003  # vs -0.00001 in base
+        self.rewards.overspeed.weight = -1.0  # vs -0.1 in base
+        self.rewards.overeffort.weight = -1.0  # vs -0.1 in base
+        
+        # pfail_threshold adjustments to match checkpoint behavior
+        self.rewards.feet_slide.params["pfail_threshold"] = 1.0  # vs 0.2 in base
+        self.rewards.soft_landing.params["pfail_threshold"] = 1.0  # vs 0.2 in base
+        self.rewards.overspeed.params["pfail_threshold"] = 1.0  # vs 0.15 in base
+        self.rewards.overeffort.params["pfail_threshold"] = 1.0  # vs 0.15 in base
 
+        self.commands.motion.anchor_body_name = "pelvis"
 
 @configclass
 class G1FlatProjGravObsEnvCfg_MotionEndReset(G1FlatProjGravObsEnvCfg):

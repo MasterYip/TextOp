@@ -816,7 +816,7 @@ class MotionCommand(CommandTerm):
         # IMPORTANT
         self.time_steps += 1
         env_ids = torch.where(self.time_steps >= self.motion_length)[0]
-        if self.cfg.motion_end_reset:
+        if hasattr(self.cfg, "motion_end_reset") and self.cfg.motion_end_reset:
             self.motion_end_reset_env_idx = env_ids.clone()
         self._resample_command(env_ids)
 
