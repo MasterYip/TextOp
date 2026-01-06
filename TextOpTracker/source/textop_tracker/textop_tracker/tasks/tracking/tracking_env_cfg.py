@@ -102,6 +102,7 @@ class CommandsCfg:
         },
         velocity_range=VELOCITY_RANGE,
         joint_position_range=(-0.1, 0.1),
+        motion_end_reset = False,
     )
 
 
@@ -513,6 +514,12 @@ class TerminationsCfg:
                     "left_wrist_yaw_link",
                     "right_wrist_yaw_link",
                 ],
+        },
+    )
+    motion_end = DoneTerm(
+        func=mdp.motion_terminate,
+        params={
+            "command_name": "motion",
         },
     )
     # overboundary = DoneTerm(

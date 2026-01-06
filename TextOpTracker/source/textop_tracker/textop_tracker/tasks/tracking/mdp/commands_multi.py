@@ -268,6 +268,9 @@ class MotionCommand(CommandTerm):
                                                          device=self.device)
         # self.metrics["sampling_top1_bin"] = torch.zeros(self.num_envs, device=self.device)
 
+        # For motion end termination
+        self.motion_end_reset_env_idx = None
+
     def _init_buffers(self):
         """初始化buffer存储轨迹数据"""
         # 获取joint数量
@@ -810,8 +813,11 @@ class MotionCommand(CommandTerm):
     # [Necessary]
     def _update_command(self):
         # time_steps正常情况是按顺序增加，如果完成了一个序列，再重新按失败率采样
+        # IMPORTANT
         self.time_steps += 1
         env_ids = torch.where(self.time_steps >= self.motion_length)[0]
+        if self.cfg.motion_end_reset:
+            self.motion_end_reset_env_idx = env_ids.clone()
         self._resample_command(env_ids)
 
         anchor_pos_w_repeat = self.anchor_pos_w[:, None, :].repeat(
@@ -1012,3 +1018,6 @@ class MotionCommandCfg(CommandTermCfg):
 
     # Random Static
     random_static_prob: float = -1.0
+
+    # Motion end reset
+    motion_end_reset: bool = False

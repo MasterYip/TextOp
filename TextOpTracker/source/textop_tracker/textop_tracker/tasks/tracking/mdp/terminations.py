@@ -140,3 +140,14 @@ def bad_motion_body_pos_z_only(
     body_indexes = _get_body_indexes(command, body_names)
     error = torch.abs(command.body_pos_relative_w[:, body_indexes, -1] - command.robot_body_pos_w[:, body_indexes, -1])
     return torch.any(error > threshold, dim=-1)
+
+
+def motion_terminate(env: ManagerBasedRLEnv, command_name: str) -> torch.Tensor:
+    # Terminate if at the end of the motion
+    command = env.command_manager.get_term(command_name)
+    reset_idx = command.motion_end_reset_env_idx.clone()
+    command.motion_end_reset_env_idx = None
+    if reset_idx is not None and reset_idx.numel() > 0:
+        return reset_idx
+    else:
+        return torch.zeros(env.num_envs, dtype=torch.bool, device=env.device)

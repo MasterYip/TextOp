@@ -48,6 +48,16 @@ class G1FlatProjGravObsEnvCfg(G1FlatEnvCfg):
 
 
 @configclass
+class G1FlatProjGravObsEnvCfg_MotionEndReset(G1FlatProjGravObsEnvCfg):
+    """G1 Flat environment with projected gravity observations and motion end reset enabled."""
+
+    def __post_init__(self):
+        super().__post_init__()
+        # Enable motion end reset (episode resets when motion sequence ends)
+        self.commands.motion.motion_end_reset = True
+
+
+@configclass
 class G1FlatProjGravObsEnvCfg_LargeHand(G1FlatProjGravObsEnvCfg):
 
     def __post_init__(self):

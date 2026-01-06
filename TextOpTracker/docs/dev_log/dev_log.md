@@ -1,3 +1,11 @@
+
+## BUG
+
+- 20260106 DataCollection Episode is not continuous
+
+
+## Prompt
+
 ### 20250105 data_dyeing
 
 #file:data_collection.py  collects data from isaaclab.
