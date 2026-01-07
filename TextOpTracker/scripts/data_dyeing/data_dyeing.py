@@ -114,7 +114,9 @@ class MotionDataDyer:
         vocabulary = []
         for category, texts in vocab_config.get('vocabulary_categories', {}).items():
             vocabulary.extend(texts)
-        
+        # Remove duplicates
+        vocabulary = list(set(vocabulary))
+
         print(f"  Loaded {len(vocabulary)} text descriptions")
         
         # Encode vocabulary with CLIP (same as dyed_data_vis.py)

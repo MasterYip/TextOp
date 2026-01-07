@@ -24,9 +24,9 @@ Visualization tools for motion data encoded with CLIP latent vectors.
 cd TextOpTracker/scripts/data_dyeing/test
 
 python dyed_data_vis.py \
+    --episodes-range 0 10 \
     --zarr_path ../../../artifacts/g1_multimotion_noise_median/motion_dyed.zarr \
-    --checkpoint ../../../../MotionCLIP/exps/g1-model-xyz/checkpoint_0100.pth.tar \ 
-    --episodes-range 0 10
+    --checkpoint ../../../../MotionCLIP/exps/g1-model-xyz/checkpoint_0100.pth.tar
 ```
 
 ### Advanced Options

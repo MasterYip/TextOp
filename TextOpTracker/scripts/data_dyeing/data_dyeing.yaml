@@ -39,7 +39,7 @@ encoding:
   # When enabled, motion embeddings are aligned to text embedding space
   # by computing vocabulary-weighted averages of CLIP text embeddings
   use_text_alignment: false  # Set to true to enable text-aligned embeddings
-  vocabulary_path: "test/categories.yaml"  # Path to vocabulary YAML file
+  vocabulary_path: "text_vocab.yaml"  # Path to vocabulary YAML file
 
 # Output configuration
 output:

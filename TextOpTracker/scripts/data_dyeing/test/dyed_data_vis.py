@@ -56,7 +56,9 @@ def load_vocabulary_categories(yaml_path=None):
     vocabulary = []
     for category, texts in config.get('vocabulary_categories', {}).items():
         vocabulary.extend(texts)
-    
+    # Remove duplicates
+    vocabulary = list(set(vocabulary))
+
     return vocabulary
 
 
