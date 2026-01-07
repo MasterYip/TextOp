@@ -814,7 +814,8 @@ class MotionCommand(CommandTerm):
     def _update_command(self):
         # time_steps正常情况是按顺序增加，如果完成了一个序列，再重新按失败率采样
         # IMPORTANT
-        self.time_steps += 1
+        if not self.cfg.freeze_motion:
+            self.time_steps += 1
         env_ids = torch.where(self.time_steps >= self.motion_length)[0]
         if hasattr(self.cfg, "motion_end_reset") and self.cfg.motion_end_reset:
             self.motion_end_reset_env_idx = self.time_steps >= self.motion_length
@@ -1021,3 +1022,5 @@ class MotionCommandCfg(CommandTermCfg):
 
     # Motion end reset
     motion_end_reset: bool = False
+    # Freeze motion
+    freeze_motion: bool = False
