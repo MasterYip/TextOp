@@ -7,7 +7,8 @@ from isaaclab.managers import ObservationTermCfg as ObsTerm
 from textop_tracker.robots.g1 import G1_ACTION_SCALE, G1_CYLINDER_CFG
 from textop_tracker.tasks.tracking.tracking_env_cfg import TrackingEnvCfg
 import textop_tracker.tasks.tracking.mdp as mdp
-
+from isaaclab.managers import TerminationTermCfg as DoneTerm
+import textop_tracker.tasks.tracking.mdp as mdp
 
 @configclass
 class G1DiffusionEnvCfg(TrackingEnvCfg):
@@ -68,10 +69,21 @@ class G1DiffusionEnvCfg(TrackingEnvCfg):
         #     raise FileNotFoundError(f"No motion.npz found in {ROOT_DIR / 'artifacts' / 'Data10k-open'}")
         
         # Placeholder motion file path (not used during diffusion policy execution)
-        self.commands.motion.motion_files = ["/home/user/CodeSpace/HumanoidCtrl/TextOp/TextOpTracker/artifacts/Data10k-open/homejrhangmr_dataset_pbhc_contact_maskACCADFemale1Walking_c3dB3-walk1_posespkl/motion.npz"]
+        self.commands.motion.motion_files = ["/home/user/CodeSpace/HumanoidCtrl/TextOp/TextOpTracker/artifacts/Data10k-open/homejrhangmr_dataset_pbhc_contact_maskACCADFemale1General_c3dA1-Stand_posespkl/motion.npz"]
         
         # Disable domain randomization for clean evaluation
         self.events.push_robot = None
         self.events.physics_material = None
         self.events.add_joint_default_pos = None
         self.events.base_com = None
+
+        self.terminations = self.terminations.replace(
+            anchor_pos=DoneTerm(func=mdp.bad_anchor_pos_z_only,
+                                params={
+                                    "command_name": "motion",
+                                    "threshold": 0.5
+                                }),
+            anchor_ori=None,
+            ee_body_pos=None,
+            motion_end=None,
+        )

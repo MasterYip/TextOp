@@ -9,6 +9,8 @@
 
 ## Prompt
 
+
+
 ### 20250105 data_dyeing
 
 #file:data_collection.py  collects data from isaaclab.
@@ -30,3 +32,7 @@ I notice a important bug: the body position ordering is different between #file:
 
 For MotionCLIP side, the order can be found in #file:g1_amass_utils.py 
 For TeleOP side, I think the order are put in alphabet order.
+
+**save motion embedding**
+A problem shows up: There is a semantic gap between text embedding & motion embedding. The cond co-diffuse is trained on motion embedding, not works good for text embedding.
+I hope you add an option to save the motion embedding  with interval to txt in #file:dyed_data_vis.py . So that I can try whether the motion embedding can work for cond co-diffuse

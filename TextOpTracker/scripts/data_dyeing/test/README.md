@@ -51,6 +51,99 @@ python dyed_data_vis.py \
 - `--fps`: Frames per second for video output (default: 30)
 - `--output_dir`: Output directory for visualizations (default: current directory)
 
+## Save embeddings
+
+### 1. **Save Motion Embeddings Method**
+- Extracts motion embeddings from episodes
+- Supports sampling at intervals (every frame, every 10 frames, etc.)
+- Multiple output formats: `.txt`, `.npy`, `.pt`
+- Automatically saves metadata with frame indices
+
+### 2. **Command-Line Options**
+- `--save-embeddings`: Enable embedding export
+- `--embedding-interval N`: Sample every N frames (default: 1)
+- `--embedding-format FORMAT`: Choose format (txt/npy/pt)
+- `--only-embeddings`: Skip visualizations, only export embeddings
+
+## Usage Examples
+
+**Save embeddings from episode 100 (every frame):**
+```bash
+python dyed_data_vis.py \
+    --zarr_path ../../artifacts/g1_multimotion_noise_median/motion_dyed.zarr \
+    --checkpoint ../../../../MotionCLIP/exps/g1-model-xyz/checkpoint_0100.pth.tar \
+    --episode 100 \
+    --save-embeddings \
+    --only-embeddings
+```
+
+**Save embeddings at 50-frame intervals:**
+```bash
+python dyed_data_vis.py \
+    --zarr_path ../../artifacts/g1_multimotion_noise_median/motion_dyed.zarr \
+    --checkpoint ../../../../MotionCLIP/exps/g1-model-xyz/checkpoint_0100.pth.tar \
+    --episode 3 \
+    --save-embeddings \
+    --embedding-interval 50 \
+    --embedding-format pt \
+    --only-embeddings
+```
+
+**Save from multiple episodes:**
+```bash
+python dyed_data_vis.py \
+    --zarr_path ../../artifacts/g1_multimotion_noise_median/motion_dyed.zarr \
+    --checkpoint ../../../../MotionCLIP/exps/g1-model-xyz/checkpoint_0100.pth.tar \
+    --episodes-range 100 110 \
+    --save-embeddings \
+    --only-embeddings
+```
+
+**Save as PyTorch tensor:**
+```bash
+python dyed_data_vis.py \
+    --zarr_path ../../artifacts/g1_multimotion_noise_median/motion_dyed.zarr \
+    --checkpoint ../../../../MotionCLIP/exps/g1-model-xyz/checkpoint_0100.pth.tar \
+    --episode 100 \
+    --save-embeddings \
+    --embedding-format pt \
+    --only-embeddings
+```
+
+## Output Files
+
+For each episode, you'll get:
+1. **`episode_100_embeddings_interval1.txt`** - Motion embeddings (space-separated floats)
+2. **`episode_100_embeddings_interval1.meta.txt`** - Metadata with frame indices
+
+**Text format example:**
+```
+# Episode 100 motion embeddings (interval=1)
+# Shape: (300, 512)
+# Each row is one embedding vector
+-0.12345678 0.23456789 ... (512 values per line)
+-0.34567890 0.45678901 ...
+...
+```
+
+**Metadata example:**
+```
+Episode: 100
+Total frames: 300
+Sampling interval: 1
+Sampled frames: 300
+Embedding dimension: 512
+Embedding shape: (300, 512)
+
+Frame indices (0-indexed):
+  Embedding 0: Frame 0
+  Embedding 1: Frame 1
+  ...
+```
+
+This will allow you to test whether using actual motion embeddings (instead of text-to-CLIP embeddings) bridges the semantic gap and improves the conditional co-diffusion model's performance.
+
+
 ## Output Files
 
 The script generates two files per episode:

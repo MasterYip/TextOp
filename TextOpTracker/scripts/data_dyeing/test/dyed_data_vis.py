@@ -284,6 +284,81 @@ class DyedDataVisualizer:
         print(f"✓ Visualization saved to: {output_path}")
         print(f"{'='*80}\n")
     
+    def save_motion_embeddings(self, episode_idx=0, output_path=None, interval=1, format='txt'):
+        """
+        Save motion embeddings from an episode to file.
+        
+        Args:
+            episode_idx: Episode index
+            output_path: Output file path (if None, uses default)
+            interval: Frame interval for sampling embeddings (1 = every frame, 10 = every 10th frame, etc.)
+            format: Output format ('txt', 'npy', or 'pt')
+        """
+        print(f"\n{'='*80}")
+        print(f"Saving Motion Embeddings from Episode {episode_idx}")
+        print(f"{'='*80}\n")
+        
+        # Get episode motion latents
+        episode_data = self.buffer.get_episode(episode_idx)
+        motion_latents = episode_data['motion_latent']  # [T, latent_dim]
+        T = motion_latents.shape[0]
+        
+        # Sample at interval
+        sampled_latents = motion_latents[::interval]
+        num_sampled = sampled_latents.shape[0]
+        
+        print(f"Episode length: {T} frames")
+        print(f"Sampling interval: {interval}")
+        print(f"Sampled embeddings: {num_sampled}")
+        print(f"Embedding dimension: {sampled_latents.shape[1]}")
+        
+        # Set output path
+        if output_path is None:
+            output_path = SCRIPT_DIR / f"episode_{episode_idx}_embeddings_interval{interval}.{format}"
+        
+        # Save in requested format
+        if format == 'txt':
+            # Save as text file with one embedding per line
+            np.savetxt(output_path, sampled_latents, fmt='%.8f', 
+                      header=f"Episode {episode_idx} motion embeddings (interval={interval})\n"
+                             f"Shape: {sampled_latents.shape}\n"
+                             f"Each row is one embedding vector",
+                      comments='# ')
+            print(f"✓ Saved as text file (space-separated floats)")
+        
+        elif format == 'npy':
+            # Save as numpy binary
+            np.save(output_path, sampled_latents)
+            print(f"✓ Saved as numpy binary")
+        
+        elif format == 'pt':
+            # Save as PyTorch tensor
+            torch.save(torch.from_numpy(sampled_latents), output_path)
+            print(f"✓ Saved as PyTorch tensor")
+        
+        else:
+            raise ValueError(f"Unknown format: {format}. Use 'txt', 'npy', or 'pt'")
+        
+        print(f"✓ Motion embeddings saved to: {output_path}")
+        
+        # Also save metadata
+        meta_path = output_path.with_suffix('.meta.txt')
+        with open(meta_path, 'w') as f:
+            f.write(f"Episode: {episode_idx}\n")
+            f.write(f"Total frames: {T}\n")
+            f.write(f"Sampling interval: {interval}\n")
+            f.write(f"Sampled frames: {num_sampled}\n")
+            f.write(f"Embedding dimension: {sampled_latents.shape[1]}\n")
+            f.write(f"Embedding shape: {sampled_latents.shape}\n")
+            f.write(f"\nFrame indices (0-indexed):\n")
+            for i, frame_idx in enumerate(range(0, T, interval)):
+                f.write(f"  Embedding {i}: Frame {frame_idx}\n")
+        
+        print(f"✓ Metadata saved to: {meta_path}")
+        print(f"{'='*80}\n")
+        
+        return output_path
+    
     def visualize_tsne_trajectory(self, episode_idx=0, output_path=None):
         """
         Visualize episode trajectory in t-SNE semantic space.
@@ -420,6 +495,14 @@ def main():
                        help='FPS for video output (default: 30)')
     parser.add_argument('--output_dir', type=str, default=None,
                        help='Output directory (default: current script dir)')
+    parser.add_argument('--save-embeddings', action='store_true',
+                       help='Save motion embeddings to file')
+    parser.add_argument('--embedding-interval', type=int, default=1,
+                       help='Frame interval for sampling embeddings (default: 1 = every frame)')
+    parser.add_argument('--embedding-format', type=str, default='txt', choices=['txt', 'npy', 'pt'],
+                       help='Format for saved embeddings (default: txt)')
+    parser.add_argument('--only-embeddings', action='store_true',
+                       help='Only save embeddings, skip visualizations')
     
     args = parser.parse_args()
     
@@ -509,9 +592,25 @@ def main():
     
     all_videos = []
     all_tsne = []
+    all_embeddings = []
     
     for i, episode_idx in enumerate(episodes, 1):
         print(f"\n[{i}/{len(episodes)}] Processing Episode {episode_idx}...")
+        
+        # Save embeddings if requested
+        if args.save_embeddings or args.only_embeddings:
+            embedding_path = output_dir / f"episode_{episode_idx}_embeddings_interval{args.embedding_interval}.{args.embedding_format}"
+            visualizer.save_motion_embeddings(
+                episode_idx=episode_idx,
+                output_path=embedding_path,
+                interval=args.embedding_interval,
+                format=args.embedding_format
+            )
+            all_embeddings.append(embedding_path)
+        
+        # Skip visualizations if only saving embeddings
+        if args.only_embeddings:
+            continue
         
         # 1. Real-time text prediction visualization
         video_path = output_dir / f"episode_{episode_idx}_realtime.gif"
@@ -533,11 +632,21 @@ def main():
     print("\n" + "="*80)
     print("ALL VISUALIZATIONS COMPLETE!")
     print("="*80)
-    print(f"\nGenerated {len(episodes)} episode visualizations:")
-    for video_path, tsne_path in zip(all_videos, all_tsne):
-        print(f"\n  Episode {video_path.stem.split('_')[1]}:")
-        print(f"    Video: {video_path}")
-        print(f"    t-SNE: {tsne_path}")
+    
+    if args.only_embeddings:
+        print(f"\nSaved {len(episodes)} episode embeddings:")
+        for embedding_path in all_embeddings:
+            print(f"  {embedding_path}")
+    else:
+        print(f"\nGenerated {len(episodes)} episode visualizations:")
+        for idx in range(len(episodes)):
+            print(f"\n  Episode {episodes[idx]}:")
+            if all_videos:
+                print(f"    Video: {all_videos[idx]}")
+            if all_tsne:
+                print(f"    t-SNE: {all_tsne[idx]}")
+            if all_embeddings:
+                print(f"    Embeddings: {all_embeddings[idx]}")
 
 
 if __name__ == '__main__':
