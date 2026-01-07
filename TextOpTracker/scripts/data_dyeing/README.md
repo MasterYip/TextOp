@@ -143,6 +143,46 @@ print("Latent shape:", root['motion_latent'].shape)
 latent_i = root['motion_latent'][i]  # [512,]
 ```
 
+## Motion Encoding Modes
+
+The data dyeing script supports two encoding modes:
+
+### 1. **Direct Motion Encoding** (Default)
+- Encodes motions directly with MotionCLIP encoder
+- Results in motion embeddings in motion latent space
+- Fast and efficient
+
+### 2. **Text-Aligned Motion Encoding** (New)
+- Bridges the semantic gap between motion and text embeddings
+- Process:
+  1. Encode motion with MotionCLIP → motion latent
+  2. Compute similarity with vast vocabulary of text descriptions
+  3. Create weighted average of CLIP text embeddings based on similarity
+- Results in embeddings aligned with CLIP text space
+- Better for conditional models trained with text-based control
+
+**When to use text-aligned encoding:**
+- When using CLIP text embeddings for conditioning during evaluation
+- When you need embeddings compatible with text-based control
+- When bridging semantic gap is critical
+
+**Configuration:**
+```yaml
+# In data_dyeing.yaml
+encoding:
+  use_text_alignment: true  # Enable text-aligned embeddings
+  vocabulary_path: "test/categories.yaml"  # Vocabulary file
+```
+
+**Usage:**
+```bash
+# Create text-aligned embeddings
+python data_dyeing.py encoding.use_text_alignment=true
+
+# Regular motion embeddings (default)
+python data_dyeing.py encoding.use_text_alignment=false
+```
+
 ## Performance
 
 **Encoding Speed:**

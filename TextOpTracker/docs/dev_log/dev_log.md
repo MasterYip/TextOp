@@ -20,6 +20,9 @@ Requirements:
 1. Implement motion format convertor to prepare motion before put into motion clip. You can look for the data format in  #sym:_load , there are several pose_rep options. Besides, note that for each frame's motion latent, you should sample around this frame to get the motion sequence as model input. About g1 AMASS dataset see #file:amass.py 
 2. motion encoding to clip space. You can see how to use the motionclip encoder in #file:minimal_load.py . You should dye the motions in batch, adding the new motion latent to the dataset dict, and finally save it again.
 
+**text embedding calculation**
+I found this gap is indeed innegligible. I hope you create a new motion dyeing method in #file:data_dyeing.py . This loads a vast vocabulary from ymal file, calculate confidence of the volcab, then compute the volcab confidence weighted  embedding as the embedding. In this way, the embedding aligns with the text embedding. Refer to #file:dyed_data_vis.py  for the detail of text similarity computation
+
 ### 20250106 DyedData Visualization
 
 I hope to visualize the dyed data in such way in #file:dyed_data_vis.py  (if need more modules, put them in TextOpTracker/scripts/data_dyeing/test ) :

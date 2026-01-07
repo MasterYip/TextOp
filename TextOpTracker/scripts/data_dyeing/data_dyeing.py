@@ -26,6 +26,8 @@ import zarr
 import hydra
 from omegaconf import DictConfig, OmegaConf
 from tqdm import tqdm
+import yaml
+import clip
 
 # Import MotionCLIP utilities
 from src.utils.get_model_and_data import get_motion_clip
@@ -90,6 +92,41 @@ class MotionDataDyer:
             self.window_size = self.model_cfg.model.num_frames
         else:
             self.window_size = cfg.encoding.window_size
+        
+        # Load vocabulary if using text-aligned encoding
+        self.text_features_norm = None
+        if cfg.encoding.get('use_text_alignment', False):
+            self._load_vocabulary()
+    
+    def _load_vocabulary(self):
+        """Load vocabulary and encode with CLIP text encoder."""
+        print(f"\n  Loading vocabulary for text alignment...")
+        vocab_path = self.cfg.encoding.vocabulary_path
+        
+        if not os.path.exists(vocab_path):
+            raise FileNotFoundError(f"Vocabulary file not found: {vocab_path}")
+        
+        # Load vocabulary from YAML
+        with open(vocab_path, 'r') as f:
+            vocab_config = yaml.safe_load(f)
+        
+        # Flatten vocabulary into a list
+        vocabulary = []
+        for category, texts in vocab_config.get('vocabulary_categories', {}).items():
+            vocabulary.extend(texts)
+        
+        print(f"  Loaded {len(vocabulary)} text descriptions")
+        
+        # Encode vocabulary with CLIP (same as dyed_data_vis.py)
+        print(f"  Encoding vocabulary with CLIP text encoder...")
+        text_tokens = clip.tokenize(vocabulary).to(self.device)
+        
+        with torch.no_grad():
+            text_features = self.model.clip_model.encode_text(text_tokens).float()
+            self.text_features_norm = text_features / text_features.norm(dim=-1, keepdim=True)
+        
+        print(f"  Text features shape: {self.text_features_norm.shape}")
+        print(f"  Text alignment enabled!")
     
     def load_dataset(self):
         """Load input zarr dataset."""
@@ -179,6 +216,10 @@ class MotionDataDyer:
                 
                 latent_features = encoded['mu']  # [B, latent_dim]
                 
+                # Apply text alignment if enabled
+                if self.text_features_norm is not None:
+                    latent_features = self._align_to_text(latent_features)
+                
                 # Store latents
                 all_latents[batch_start:batch_end] = latent_features.cpu().numpy()
                 
@@ -193,6 +234,34 @@ class MotionDataDyer:
         print(f"  Latent shape: {all_latents.shape}")
         
         return all_latents
+    
+    def _align_to_text(self, motion_latents):
+        """
+        Align motion latents to text embedding space using vocabulary-weighted averaging.
+        
+        This computes similarity between motion latents and all text embeddings,
+        then creates a new embedding as a weighted average of text embeddings.
+        This bridges the semantic gap between motion and text embeddings.
+        
+        Args:
+            motion_latents: Motion latent vectors [B, latent_dim]
+        
+        Returns:
+            text_aligned_latents: Text-aligned latent vectors [B, latent_dim]
+        """
+        # Normalize motion latents (same as dyed_data_vis.py)
+        motion_latents_norm = motion_latents / motion_latents.norm(dim=-1, keepdim=True)
+        
+        # Compute similarity with all text descriptions [B, num_texts]
+        # Using same formula as dyed_data_vis.py: (100.0 * motion @ text.T).softmax()
+        similarity = (100.0 * motion_latents_norm @ self.text_features_norm.t()).softmax(dim=-1)
+        
+        # Compute weighted average of text embeddings
+        # text_aligned = sum(similarity[i] * text_embedding[i])
+        # Shape: [B, num_texts] @ [num_texts, latent_dim] = [B, latent_dim]
+        text_aligned_latents = similarity @ self.text_features_norm
+        
+        return text_aligned_latents
     
     def _extract_window(self, center_idx):
         """Extract motion window for a specific frame."""

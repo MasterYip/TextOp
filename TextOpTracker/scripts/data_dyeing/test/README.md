@@ -80,7 +80,7 @@ python dyed_data_vis.py \
 **Save embeddings at 50-frame intervals:**
 ```bash
 python dyed_data_vis.py \
-    --zarr_path ../../artifacts/g1_multimotion_noise_median/motion_dyed.zarr \
+    --zarr_path ../../../artifacts/g1_multimotion_noise_median/motion_dyed.zarr \
     --checkpoint ../../../../MotionCLIP/exps/g1-model-xyz/checkpoint_0100.pth.tar \
     --episode 3 \
     --save-embeddings \
