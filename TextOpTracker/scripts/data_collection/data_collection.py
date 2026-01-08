@@ -359,9 +359,18 @@ def collect_data(cfg: DictConfig):
                     # Apply quality filters
                     keep_episode = True
                     
-                    if collection_mode == "deterministic" and not infos["time_outs"][env_idx]:
-                        # In deterministic mode, only keep if time_out or motion_end
-                        keep_episode = False
+                    # FIXME: idle is seted before data is sent back / time_outs not correct.
+                    # Filter out idle env timeouts (all tasks completed, env is just waiting)
+                    if collection_mode == "deterministic":
+                        # Check if env is idle from command manager metrics
+                        if env_unwrapped.command_manager._terms["motion"].env_is_idle[env_idx]:
+                            # Skip idle env timeouts
+                            keep_episode = False
+                            total_episodes_collected -= 1  # Don't count towards collected
+                        
+                        # In deterministic mode, only keep if time_out or motion_end (and not idle)
+                        elif not infos["time_outs"][env_idx]:
+                            keep_episode = False
 
                     # Filter by episode length: If is shorter than min length, discard
                     if collection_mode=="standard" and ep_length < cfg.collection.min_episode_length:

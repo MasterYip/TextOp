@@ -668,7 +668,7 @@ class MotionCollectionCommand(CommandTerm):
                 completed_count = (self.task_status == 1).sum().item()
                 print(f"[Collection] Completed: Motion {motion_id}, Sample {sample_id} "
                       f"({completed_count}/{self.total_tasks})")
-            elif not was_successful and self.env_task_assignment[env_id_item] >= 0:
+            elif not was_successful and not self.env_is_idle[env_id_item] and self.env_task_assignment[env_id_item] >= 0:
                 # Failed episode - reset task to unassigned (0) so it can be retried
                 motion_id = self.motion_idx[env_id_item].item()
                 sample_id = self.sample_idx[env_id_item].item()
