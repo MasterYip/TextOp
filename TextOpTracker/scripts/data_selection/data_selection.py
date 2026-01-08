@@ -71,7 +71,7 @@ class DataSelectionSceneCfg(InteractiveSceneCfg):
 class MotionSelector:
     """Interactive motion selector with pagination."""
     
-    def __init__(self, motion_files: list, page_size: int, output_dir: str):
+    def __init__(self, motion_files: list, page_size: int, output_dir: str, initial_selected_names: list | None = None):
         self.all_motion_files = motion_files
         self.page_size = page_size
         self.output_dir = Path(output_dir)
@@ -83,6 +83,7 @@ class MotionSelector:
         
         # Motion names for display
         self.motion_names = [Path(f).parent.name for f in motion_files]
+        self.name_to_index = {name: idx for idx, name in enumerate(self.motion_names)}
         
         # Load motion metadata (frame counts)
         self.motion_frames = []
@@ -92,6 +93,17 @@ class MotionSelector:
             num_frames = data['joint_pos'].shape[0]
             self.motion_frames.append(num_frames)
         print(f"[INFO] Loaded metadata for {len(motion_files)} motions")
+
+        # Preload selected motions from YAML (by names)
+        if initial_selected_names:
+            preload_count = 0
+            for name in initial_selected_names:
+                idx = self.name_to_index.get(name)
+                if idx is not None:
+                    self.selected_motions.add(idx)
+                    preload_count += 1
+            if preload_count > 0:
+                print(f"[INFO] Preloaded {preload_count} selected motions from YAML")
         
         print("\n" + "="*80)
         print("INTERACTIVE MOTION SELECTOR")
@@ -328,12 +340,23 @@ class MotionSelector:
             shutil.copytree(src_dir, dst_dir)
             copied_motions.append(motion_name)
         
-        # Save motion list to YAML
+        # Save motion list to YAML (merge with existing, ignore duplicates)
         yaml_path = self.output_dir / "selected_motions.yaml"
+        existing_motions: list[str] = []
+        if yaml_path.exists():
+            try:
+                with open(yaml_path, 'r') as f:
+                    data = yaml.safe_load(f) or {}
+                    existing_motions = data.get('motions', []) or []
+                print(f"[INFO] Loaded existing YAML with {len(existing_motions)} motions")
+            except Exception as e:
+                print(f"[WARNING] Failed to load existing YAML: {e}")
+        
+        merged_motions = sorted(set(existing_motions) | set(copied_motions))
         with open(yaml_path, 'w') as f:
-            yaml.dump({
-                'total_motions': len(copied_motions),
-                'motions': copied_motions,
+            yaml.safe_dump({
+                'total_motions': len(merged_motions),
+                'motions': merged_motions,
                 'source_pattern': args_cli.motion_pattern,
             }, f, default_flow_style=False)
         
@@ -342,7 +365,7 @@ class MotionSelector:
         print("="*80)
         print(f"Copied: {len(copied_motions)} motions")
         print(f"Location: {self.output_dir}")
-        print(f"Motion list: {yaml_path}")
+        print(f"Motion list updated: {yaml_path} (total {len(merged_motions)})")
         print("="*80 + "\n")
         
         self.should_exit = True
@@ -465,6 +488,20 @@ def main():
     # Sort for consistent ordering
     motion_files = sorted(motion_files)
     
+    # Preload selections from YAML if exists
+    output_dir = Path(args_cli.output_dir)
+    yaml_path = output_dir / "selected_motions.yaml"
+    initial_selected_names: list[str] = []
+    if yaml_path.exists():
+        try:
+            with open(yaml_path, 'r') as f:
+                data = yaml.safe_load(f) or {}
+                initial_selected_names = data.get('motions', []) or []
+            if initial_selected_names:
+                print(f"[INFO] Preloading {len(initial_selected_names)} selections from {yaml_path}")
+        except Exception as e:
+            print(f"[WARNING] Failed to preload YAML selections: {e}")
+    
     print("="*80)
     print(f"Interactive Motion Selection")
     print("="*80)
@@ -478,7 +515,7 @@ def main():
     display_size = min(args_cli.page_size, args_cli.max_envs)
     
     # Create motion selector
-    selector = MotionSelector(motion_files, display_size, args_cli.output_dir)
+    selector = MotionSelector(motion_files, display_size, args_cli.output_dir, initial_selected_names=initial_selected_names)
     
     # Setup simulation
     sim_cfg = sim_utils.SimulationCfg(device=args_cli.device)
