@@ -645,9 +645,9 @@ class MotionCollectionCommand(CommandTerm):
         for env_id in env_ids:
             env_id_item = env_id.item()
             
-            # Check if episode completed successfully (reached full motion length)
-            # Motion completes when time_steps >= motion_length
-            was_successful = self.time_steps[env_id_item] >= self.motion_length[env_id_item]
+            # Check if episode completed successfully
+            # Use termination manager to judge: success if not failed and not timed out
+            was_successful = ~self._env.termination_manager.terminated[env_id]  # type: ignore
             
             if was_successful and self.env_task_assignment[env_id_item] >= 0:
                 # Mark current task as completed
