@@ -23,17 +23,11 @@ The data dyeing process:
 ### Basic Usage
 
 ```bash
-cd TextOpTracker/scripts/data_dyeing
-python data_dyeing.py
-```
-
-### Custom Configuration
-
-```bash
 python data_dyeing.py \
-  input.zarr_path=../../outputs/my_data.zarr \
-  output.zarr_path=../../outputs/my_data_dyed.zarr \
-  motionclip.checkpoint_path=../../../MotionCLIP/exps/g1-model/checkpoint_0100.pth.tar
+  input.zarr_path=../../artifacts/g1_multimotion_noise_median/motion.zarr \
+  output.zarr_path=../../artifacts/g1_multimotion_noise_median/motion_dyed.zarr \
+  motionclip.checkpoint_path=../../../MotionCLIP/exps/g1-model-xyz/checkpoint_0100.pth.tar \
+  encoding.use_text_alignment=true
 ```
 
 ### Configuration Options

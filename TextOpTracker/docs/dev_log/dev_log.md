@@ -9,7 +9,10 @@
 
 ## Prompt
 
+### 20260108 data_selection
 
+I hope to implement #file:data_selection.py . Requirement:
+1. #file:data_selection.py  replays motions like #file:replay_npz_multi.py for user, and user can input their wanted motion env_id in terminal one by one. Due to there is too much motions, you should  provide command to change motions (e.g. 1000 in total, vis 100 each time, provide a command to turn "page". in each  page, env_id range form 0-99) When done, it copies the selected motion to the new specified folder. Override existing same named motion, and save  the motion list in yaml.
 
 ### 20250105 data_dyeing
 
