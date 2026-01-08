@@ -9,6 +9,13 @@
 
 ## Prompt
 
+### 20260108 data_collection improvement
+
+I need to implement a new data collection strategy. Requirements:
+1. Basic logic. For example, input M motion files, in order to ensure action distribution coverage, for each motion sequence sample N times (full length). There are totally M*N episodes saved. Others keep as the origin version.
+2. Implement #file:commands_collection.py . It automatically assign the motion reference to fulfill the N*M sampling task, If the motion are called to resample in case of terminated (task failed) this do not counted as completed, If the tasks are all assigned, the reset the idling env to a default pos to avoid env termination at each frame. You can refer to #file:commands_multi.py for the origin file.
+3.  Update #file:data_collection.py #file:collect_dataset.sh  to support this collect mode, and keep backward compatibility. Update #file:data_collection.yaml for new configs for this collection mode. Update #file:README.md for the new mode instruction.
+
 ### 20260108 data_selection
 
 I hope to implement #file:data_selection.py . Requirement:

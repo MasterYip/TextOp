@@ -20,6 +20,10 @@ Action Noise Injection:
     η_{t+1} = η_t + θ(μ - η_t)Δt + σ√Δt ε_t
     
     This creates state diversity and collects corrective actions for robustness.
+
+Collection Modes:
+    - standard: Random sampling with quality filters (original behavior)
+    - deterministic: M motions × N samples = M*N episodes, full coverage
 """
 
 import glob
@@ -166,11 +170,40 @@ def collect_data(cfg: DictConfig):
     motion_files = glob.glob(str(Path("./artifacts") / Path(cfg.motion.pattern) / "motion.npz"))
     if not motion_files:
         raise FileNotFoundError(f"No motion.npz found in {Path('./artifacts') / Path(cfg.motion.pattern)}")
-    if len(motion_files) > cfg.task.num_envs:
-        print(f"[WARNING] Number of motion files ({len(motion_files)}) exceeds num_envs ({cfg.task.num_envs}), truncating for loading speed.")
-        motion_files = motion_files[:cfg.task.num_envs]
     
-    env_cfg.commands.motion.motion_files = motion_files
+    # === Handle collection mode ===
+    collection_mode = cfg.collection.get("mode", "standard")
+    
+    if collection_mode == "deterministic":
+        # Deterministic M*N sampling mode
+        samples_per_motion = cfg.collection.samples_per_motion
+        print(f"[INFO] Using DETERMINISTIC collection mode")
+        print(f"[INFO] {len(motion_files)} motions × {samples_per_motion} samples = {len(motion_files) * samples_per_motion} total episodes")
+        
+        # Need to use collection command term instead of standard motion command
+        from textop_tracker.tasks.tracking.mdp.commands_collection import MotionCollectionCommandCfg
+        
+        # Replace motion command with collection command
+        env_cfg.commands.motion = MotionCollectionCommandCfg(
+            asset_name=env_cfg.commands.motion.asset_name,
+            anchor_body_name=env_cfg.commands.motion.anchor_body_name,
+            body_names=env_cfg.commands.motion.body_names,
+            motion_files=motion_files,
+            samples_per_motion=samples_per_motion,
+            default_height=getattr(env_cfg.commands.motion, "default_height", 0.98),
+            pose_range=getattr(env_cfg.commands.motion, "pose_range", {}),
+            velocity_range=getattr(env_cfg.commands.motion, "velocity_range", {}),
+            joint_position_range=getattr(env_cfg.commands.motion, "joint_position_range", (-0.52, 0.52)),
+            future_steps=getattr(env_cfg.commands.motion, "future_steps", 1),
+        )
+    else:
+        # Standard random sampling mode (backward compatible)
+        print(f"[INFO] Using STANDARD collection mode")
+        if len(motion_files) > cfg.task.num_envs:
+            print(f"[WARNING] Number of motion files ({len(motion_files)}) exceeds num_envs ({cfg.task.num_envs}), truncating for loading speed.")
+            motion_files = motion_files[:cfg.task.num_envs]
+        
+        env_cfg.commands.motion.motion_files = motion_files
     
     print(f"[INFO] Using {len(motion_files)} motion files")
     print(f"[INFO] Number of environments: {cfg.task.num_envs}")
@@ -249,12 +282,29 @@ def collect_data(cfg: DictConfig):
     if cfg.collection.min_mean_reward is not None:
         print(f"[INFO] Quality filter: min_mean_reward={cfg.collection.min_mean_reward}")
     
-    pbar = tqdm(total=cfg.collection.len_to_save, desc="Collecting data")
+    # === Deterministic mode: target is M*N episodes, not timesteps ===
+    if collection_mode == "deterministic":
+        total_tasks = len(motion_files) * samples_per_motion
+        target_episodes = total_tasks
+        print(f"[INFO] Deterministic mode: collecting {target_episodes} episodes")
+        pbar = tqdm(total=target_episodes, desc="Collecting episodes")
+    else:
+        target_episodes = float('inf')  # No limit
+        pbar = tqdm(total=cfg.collection.len_to_save, desc="Collecting data")
+    
     # Import extract_robot_state from textop_tracker for consistency
     from textop_tracker.tasks.tracking.mdp.observations import extract_robot_state
 
     with torch.inference_mode():
-        while total_saved_steps < cfg.collection.len_to_save and simulation_app.is_running():
+        while simulation_app.is_running():
+            # Check stopping conditions
+            if collection_mode == "deterministic":
+                if total_episodes_saved >= target_episodes:
+                    break
+            else:
+                if total_saved_steps >= cfg.collection.len_to_save:
+                    break
+            
             # Get action from policy
             actions = policy(obs)
             
@@ -333,7 +383,12 @@ def collect_data(cfg: DictConfig):
                         buffer.add_episode(ep_data)
                         total_saved_steps += ep_length
                         total_episodes_saved += 1
-                        pbar.update(ep_length)
+                        
+                        # Update progress bar based on mode
+                        if collection_mode == "deterministic":
+                            pbar.update(1)  # Count episodes
+                        else:
+                            pbar.update(ep_length)  # Count timesteps
                     
                     # Reset episode data for this environment
                     for key in episode_data:
@@ -346,9 +401,14 @@ def collect_data(cfg: DictConfig):
                         # Only reset noise for this specific environment
                         noise_generator.state[env_idx] = noise_generator.mu
             
-            # Stop if we have enough data
-            if total_saved_steps >= cfg.collection.len_to_save:
-                break
+            # For deterministic mode: check if all tasks completed
+            if collection_mode == "deterministic":
+                # Check collection progress from command term metrics
+                if hasattr(env_unwrapped.command_manager._terms["motion"], "task_completed"):
+                    tasks_completed = env_unwrapped.command_manager._terms["motion"].task_completed.sum().item()
+                    if tasks_completed >= target_episodes:
+                        print(f"\n[INFO] All {target_episodes} tasks completed!")
+                        break
     
     pbar.close()
     
@@ -385,6 +445,8 @@ def collect_data(cfg: DictConfig):
         'checkpoint': cfg.checkpoint.path,
         'motion_pattern': cfg.motion.pattern,
         'num_envs': int(cfg.task.num_envs),
+        'collection_mode': collection_mode,
+        'samples_per_motion': int(cfg.collection.samples_per_motion) if collection_mode == "deterministic" else None,
         'min_episode_length': int(cfg.collection.min_episode_length),
         'min_mean_reward': float(cfg.collection.min_mean_reward) if cfg.collection.min_mean_reward is not None else None,
         'len_to_save': int(cfg.collection.len_to_save),

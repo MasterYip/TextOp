@@ -3,6 +3,10 @@
 # G1 Dataset Collection Script with Hydra Configuration
 # This script collects training data from a trained TextOpTracker policy for diffuse_cloc
 # Uses Hydra for configuration management
+#
+# Collection Modes:
+#   - standard (default): Random sampling with quality filters
+#   - deterministic: M motions × N samples = M*N episodes for full coverage
 
 # Default Hydra overrides (can be overridden by command line)
 HYDRA_OVERRIDES=""
@@ -28,6 +32,14 @@ while [[ $# -gt 0 ]]; do
             ;;
         --num_envs)
             HYDRA_OVERRIDES="$HYDRA_OVERRIDES task.num_envs=$2"
+            shift 2
+            ;;
+        --mode)
+            HYDRA_OVERRIDES="$HYDRA_OVERRIDES collection.mode=$2"
+            shift 2
+            ;;
+        --samples_per_motion)
+            HYDRA_OVERRIDES="$HYDRA_OVERRIDES collection.samples_per_motion=$2"
             shift 2
             ;;
         --min_episode_length)
@@ -67,17 +79,22 @@ while [[ $# -gt 0 ]]; do
             CONFIG_FILE="$2"
             shift 2
             ;;
-        *)
-            echo "Unknown option: $1"
+        -h|--help)
             echo "Usage: $0 [options]"
+            echo ""
+            echo "Collection Modes:"
+            echo "  --mode standard        Random sampling with quality filters (default)"
+            echo "  --mode deterministic   M×N sampling for full coverage"
+            echo ""
             echo "Options:"
             echo "  -c, --checkpoint PATH          Path to checkpoint"
             echo "  -m, --motion_file PATTERN      Motion file pattern"
             echo "  -o, --output_dir DIR           Output directory"
             echo "  --zarr_name NAME               Zarr filename"
             echo "  --num_envs N                   Number of environments"
+            echo "  --samples_per_motion N         Samples per motion (deterministic mode)"
             echo "  --min_episode_length N         Minimum episode length"
-            echo "  --len_to_save N                Total timesteps to save"
+            echo "  --len_to_save N                Total timesteps to save (standard mode)"
             echo "  --task NAME                    Task name"
             echo "  --no_noise                     Disable noise injection"
             echo "  --noise_sigma SIGMA            OU noise sigma parameter"
@@ -85,6 +102,12 @@ while [[ $# -gt 0 ]]; do
             echo "  --visualize                    Enable visualization"
             echo "  --load_pickle_cfg              Load config from pickle"
             echo "  --config FILE                  Custom config file"
+            echo "  -h, --help                     Show this help message"
+            exit 0
+            ;;
+        *)
+            echo "Unknown option: $1"
+            echo "Use --help for usage information"
             exit 1
             ;;
     esac
