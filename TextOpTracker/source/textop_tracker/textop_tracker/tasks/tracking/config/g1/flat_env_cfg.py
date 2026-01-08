@@ -84,6 +84,35 @@ class G1FlatProjGravObsEnvCfg_MotionEndReset(G1FlatProjGravObsEnvCfg):
         #     ee_body_pos=None,
         # )
 
+# NOTE: Temporarily not used
+@configclass
+class G1FlatProjGravObsEnvCfg_MotionCollection(G1FlatProjGravObsEnvCfg):
+    """G1 Flat environment with projected gravity observations and motion end reset enabled."""
+
+    def __post_init__(self):
+        super().__post_init__()
+        # Enable motion end reset (episode resets when motion sequence ends)
+        self.commands.motion = mdp.MotionCollectionCommandCfg(
+            future_steps=5,  # Future N-step lookahead
+            asset_name="robot",
+            resampling_time_range=(1.0e9, 1.0e9),
+            debug_vis=True,
+            pose_range={
+                "x": (-0.05, 0.05),
+                "y": (-0.05, 0.05),
+                "z": (-0.01, 0.01),
+                "roll": (-0.1, 0.1),
+                "pitch": (-0.1, 0.1),
+                "yaw": (-0.2, 0.2),
+            },
+            velocity_range=VELOCITY_RANGE,
+            joint_position_range=(-0.1, 0.1),
+        )
+        self.terminations = self.terminations.replace(
+            motion_end=None
+        )
+        self.rewards = None
+
 @configclass
 class G1FlatProjGravObsEnvCfg_LargeHand(G1FlatProjGravObsEnvCfg):
 

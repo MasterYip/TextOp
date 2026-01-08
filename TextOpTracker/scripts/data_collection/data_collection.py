@@ -195,7 +195,10 @@ def collect_data(cfg: DictConfig):
             velocity_range=getattr(env_cfg.commands.motion, "velocity_range", {}),
             joint_position_range=getattr(env_cfg.commands.motion, "joint_position_range", (-0.52, 0.52)),
             future_steps=getattr(env_cfg.commands.motion, "future_steps", 1),
+            resampling_time_range=(1.0e9, 1.0e9),
         )
+        env_cfg.terminations.motion_end = None  # Disable motion end termination
+        env_cfg.rewards = None
     else:
         # Standard random sampling mode (backward compatible)
         print(f"[INFO] Using STANDARD collection mode")
