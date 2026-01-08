@@ -84,6 +84,15 @@ class MotionSelector:
         # Motion names for display
         self.motion_names = [Path(f).parent.name for f in motion_files]
         
+        # Load motion metadata (frame counts)
+        self.motion_frames = []
+        print("[INFO] Loading motion metadata...")
+        for motion_file in motion_files:
+            data = np.load(motion_file)
+            num_frames = data['joint_pos'].shape[0]
+            self.motion_frames.append(num_frames)
+        print(f"[INFO] Loaded metadata for {len(motion_files)} motions")
+        
         print("\n" + "="*80)
         print("INTERACTIVE MOTION SELECTOR")
         print("="*80)
@@ -139,8 +148,10 @@ class MotionSelector:
         for local_id, motion_file in enumerate(page_files):
             global_id = start_idx + local_id
             motion_name = Path(motion_file).parent.name
+            num_frames = self.motion_frames[global_id]
+            duration = num_frames * 0.02  # 50 fps (dt=0.02s)
             selected_mark = "[✓]" if global_id in self.selected_motions else "[ ]"
-            print(f"{selected_mark} env_id {local_id:3d} (global {global_id:4d}): {motion_name}")
+            print(f"{selected_mark} env_id {local_id:3d} (global {global_id:4d}): {motion_name} ({duration:.2f}s, {num_frames} frames, 50fps)")
         print("-"*80 + "\n")
     
     def show_selected(self):
@@ -154,7 +165,9 @@ class MotionSelector:
         print("-"*80)
         for global_id in sorted(self.selected_motions):
             motion_name = self.motion_names[global_id]
-            print(f"  {global_id:4d}: {motion_name}")
+            num_frames = self.motion_frames[global_id]
+            duration = num_frames * 0.02  # 50 fps (dt=0.02s)
+            print(f"  {global_id:4d}: {motion_name} ({duration:.2f}s, {num_frames} frames, 50fps)")
         print("-"*80 + "\n")
     
     def handle_command(self, command: str):
@@ -190,7 +203,9 @@ class MotionSelector:
                         continue
                     
                     self.selected_motions.add(global_id)
-                    print(f"[✓] Selected: env_id {local_id} -> {self.motion_names[global_id]}")
+                    num_frames = self.motion_frames[global_id]
+                    duration = num_frames * 0.02  # 50 fps (dt=0.02s)
+                    print(f"[✓] Selected: env_id {local_id} -> {self.motion_names[global_id]} ({duration:.2f}s, {num_frames} frames, 50fps)")
                 except ValueError:
                     print(f"[ERROR] Invalid env_id: {env_id_str}")
         
