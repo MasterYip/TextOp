@@ -235,6 +235,9 @@ class MotionCollectionCommand(CommandTerm):
         self.metrics["collection_progress"] = torch.zeros(self.num_envs,
                                                          device=self.device)
 
+        # For motion end termination
+        self.motion_end_reset_env_idx = torch.zeros(self.num_envs, dtype=torch.bool, device=self.device)
+
     def _init_buffers(self):
         """Initialize buffers for trajectory data."""
         joint_dim = self.motion.joint_pos_list[0].shape[1]
@@ -757,6 +760,8 @@ class MotionCollectionCommand(CommandTerm):
         
         # Find envs that reached motion end
         env_ids = torch.where(self.time_steps >= self.motion_length)[0]
+        if hasattr(self.cfg, "motion_end_reset") and self.cfg.motion_end_reset:
+            self.motion_end_reset_env_idx = self.time_steps >= self.motion_length
         self._resample_command(env_ids)
 
         # Transform motion reference to robot frame (same as original)
@@ -816,3 +821,5 @@ class MotionCollectionCommandCfg(CommandTermCfg):
     future_steps: int = 1
     # Random Static
     random_static_prob: float = -1.0
+    # Motion end reset
+    motion_end_reset: bool = True

@@ -197,7 +197,6 @@ def collect_data(cfg: DictConfig):
             future_steps=getattr(env_cfg.commands.motion, "future_steps", 1),
             resampling_time_range=(1.0e9, 1.0e9),
         )
-        env_cfg.terminations.motion_end = None  # Disable motion end termination
         env_cfg.rewards = None
     else:
         # Standard random sampling mode (backward compatible)
@@ -360,8 +359,12 @@ def collect_data(cfg: DictConfig):
                     # Apply quality filters
                     keep_episode = True
                     
+                    if collection_mode == "deterministic" and not infos["time_outs"][env_idx]:
+                        # In deterministic mode, only keep if time_out or motion_end
+                        keep_episode = False
+
                     # Filter by episode length: If is shorter than min length, discard
-                    if ep_length < cfg.collection.min_episode_length:
+                    if collection_mode=="standard" and ep_length < cfg.collection.min_episode_length:
                         keep_episode = False
                     
                     # Filter by mean reward (if specified)
