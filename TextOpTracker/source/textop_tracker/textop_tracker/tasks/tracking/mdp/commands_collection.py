@@ -284,12 +284,44 @@ class MotionCollectionCommand(CommandTerm):
                 self.buffer_start_time[env_id] + self.buffer_length,
             )
 
-            self.joint_pos_buffer[env_id] = motion_data["joint_pos"]
+            self.joint_pos_buffer[env_id] = motion_data[
+                "joint_pos"]  # [num_envs, buffer_length, joint_dim]
             self.joint_vel_buffer[env_id] = motion_data["joint_vel"]
             self.body_pos_w_buffer[env_id] = motion_data["body_pos_w"]
             self.body_quat_w_buffer[env_id] = motion_data["body_quat_w"]
             self.body_lin_vel_w_buffer[env_id] = motion_data["body_lin_vel_w"]
             self.body_ang_vel_w_buffer[env_id] = motion_data["body_ang_vel_w"]
+
+        if self.cfg.random_static_prob > 0:
+            # Usage: p = random_static_prob
+            # p=0.1, then 10% of the envs will be static.
+            # p<0: disable random static.
+            # p>1: enable all envs to be static.
+            static_mask = torch.rand(
+                len(env_ids), device=self.device) < self.cfg.random_static_prob
+            if static_mask.any():
+                static_env_ids = env_ids[static_mask]
+                # 平移所有body, 使得所有帧的anchor等于第一帧的anchor
+                # [N, buffer_length, body_dim, 3]
+                anchor_first = self.body_pos_w_buffer[
+                    static_env_ids, 0:1,
+                    self.motion_anchor_body_index, :]  # [N, 1, 3]
+                anchor_current = self.body_pos_w_buffer[
+                    static_env_ids, :,
+                    self.motion_anchor_body_index, :]  # [N, buffer_length, 3]
+                translation = anchor_first - anchor_current  # [N, buffer_length, 3]
+                self.body_pos_w_buffer[
+                    static_env_ids, :, :, :] += translation[:, :, None, :]
+
+                # 修正body的速度：移除anchor translation后的anchor vel分量, 只保留相对速度
+                # frame_dt应为buffer内的步长, 取自数据
+                # anchor 原先vel [N, buffer_length, 3]
+                anchor_vel = self.body_lin_vel_w_buffer[
+                    static_env_ids, :,
+                    self.motion_anchor_body_index, :]  # [N, buffer_length, 3]
+                # 修正每个body vel：减去anchor vel
+                self.body_lin_vel_w_buffer[
+                    static_env_ids, :, :, :] -= anchor_vel[:, :, None, :]
 
     def _get_next_task(self) -> Optional[tuple[int, int]]:
         """Get next incomplete (motion_idx, sample_idx) task."""
@@ -445,6 +477,7 @@ class MotionCollectionCommand(CommandTerm):
             torch.arange(self.num_envs, device=self.device), buffer_indices,
             self.motion_anchor_body_index]
 
+    # Future reference properties for N-step lookahead
     @property
     def motion_joint_pos(self) -> torch.Tensor:
         """Future N-step joint positions reference."""
@@ -480,6 +513,44 @@ class MotionCollectionCommand(CommandTerm):
                 future_indices].view(self.num_envs, -1)
 
     @property
+    def motion_anchor_pos(self) -> torch.Tensor:
+        """Future N-step anchor positions reference."""
+        if self.cfg.future_steps <= 1:
+            return self.anchor_pos_w
+        else:
+            current_indices = torch.clamp(
+                self.time_steps - self.buffer_start_time, 0,
+                self.buffer_length - 1)
+            future_indices = current_indices[:, None] + torch.arange(
+                self.cfg.future_steps, device=self.device)[None, :]
+            future_indices = torch.clamp(future_indices, 0,
+                                         self.buffer_length - 1)
+            future_pos = self.body_pos_w_buffer[
+                torch.arange(self.num_envs, device=self.device)[:, None],
+                future_indices, self.motion_anchor_body_index]
+            return (future_pos + self._env.scene.env_origins[:, None, :]).view(
+                self.num_envs, -1)
+
+    @property
+    def motion_anchor_quat(self) -> torch.Tensor:
+        """Future N-step anchor quaternions reference."""
+        if self.cfg.future_steps <= 1:
+            return self.anchor_quat_w
+        else:
+            current_indices = torch.clamp(
+                self.time_steps - self.buffer_start_time, 0,
+                self.buffer_length - 1)
+            future_indices = current_indices[:, None] + torch.arange(
+                self.cfg.future_steps, device=self.device)[None, :]
+            future_indices = torch.clamp(future_indices, 0,
+                                         self.buffer_length - 1)
+            future_quat = self.body_quat_w_buffer[
+                torch.arange(self.num_envs, device=self.device)[:, None],
+                future_indices, self.motion_anchor_body_index]
+            # breakpoint()
+            return future_quat.view(self.num_envs, -1)
+
+    @property
     def robot_joint_pos(self) -> torch.Tensor:
         return self.robot.data.joint_pos
 
@@ -496,6 +567,14 @@ class MotionCollectionCommand(CommandTerm):
         return self.robot.data.body_quat_w[:, self.body_indexes]
 
     @property
+    def robot_body_lin_vel_w(self) -> torch.Tensor:
+        return self.robot.data.body_lin_vel_w[:, self.body_indexes]
+
+    @property
+    def robot_body_ang_vel_w(self) -> torch.Tensor:
+        return self.robot.data.body_ang_vel_w[:, self.body_indexes]
+
+    @property
     def robot_anchor_pos_w(self) -> torch.Tensor:
         return self.robot.data.body_pos_w[:, self.robot_anchor_body_index]
 
@@ -503,6 +582,15 @@ class MotionCollectionCommand(CommandTerm):
     def robot_anchor_quat_w(self) -> torch.Tensor:
         return self.robot.data.body_quat_w[:, self.robot_anchor_body_index]
 
+    @property
+    def robot_anchor_lin_vel_w(self) -> torch.Tensor:
+        return self.robot.data.body_lin_vel_w[:, self.robot_anchor_body_index]
+
+    @property
+    def robot_anchor_ang_vel_w(self) -> torch.Tensor:
+        return self.robot.data.body_ang_vel_w[:, self.robot_anchor_body_index]
+
+    # [Necessary]
     def _update_metrics(self):
         """Update tracking metrics."""
         self.metrics["error_anchor_pos"] = torch.norm(self.anchor_pos_w -
@@ -510,6 +598,24 @@ class MotionCollectionCommand(CommandTerm):
                                                       dim=-1)
         self.metrics["error_anchor_rot"] = quat_error_magnitude(
             self.anchor_quat_w, self.robot_anchor_quat_w)
+        self.metrics["error_anchor_lin_vel"] = torch.norm(
+            self.anchor_lin_vel_w - self.robot_anchor_lin_vel_w, dim=-1)
+        self.metrics["error_anchor_ang_vel"] = torch.norm(
+            self.anchor_ang_vel_w - self.robot_anchor_ang_vel_w, dim=-1)
+
+        self.metrics["error_body_pos"] = torch.norm(self.body_pos_relative_w -
+                                                    self.robot_body_pos_w,
+                                                    dim=-1).mean(dim=-1)
+        self.metrics["error_body_rot"] = quat_error_magnitude(
+            self.body_quat_relative_w, self.robot_body_quat_w).mean(dim=-1)
+
+        self.metrics["error_body_lin_vel"] = torch.norm(
+            self.body_lin_vel_w - self.robot_body_lin_vel_w,
+            dim=-1).mean(dim=-1)
+        self.metrics["error_body_ang_vel"] = torch.norm(
+            self.body_ang_vel_w - self.robot_body_ang_vel_w,
+            dim=-1).mean(dim=-1)
+
         self.metrics["error_joint_pos"] = torch.norm(self.joint_pos -
                                                      self.robot_joint_pos,
                                                      dim=-1)
@@ -694,3 +800,5 @@ class MotionCollectionCommandCfg(CommandTermCfg):
 
     # Future steps for N-step lookahead
     future_steps: int = 1
+    # Random Static
+    random_static_prob: float = -1.0
