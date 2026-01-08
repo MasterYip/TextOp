@@ -174,9 +174,10 @@ class MotionCollectionCommand(CommandTerm):
         self.samples_per_motion = self.cfg.samples_per_motion
         self.total_tasks = self.num_motions * self.samples_per_motion
         
-        # Track completion status: [M, N] - True if (motion_i, sample_j) completed
-        self.task_completed = torch.zeros(self.num_motions, self.samples_per_motion,
-                                         dtype=torch.bool, device=self.device)
+        # Track task status: [M, N]
+        # 0 = not started, -1 = assigned (in progress), 1 = completed
+        self.task_status = torch.zeros(self.num_motions, self.samples_per_motion,
+                                       dtype=torch.long, device=self.device)
         
         # Track which task each env is working on: [num_envs]
         # Stores linear index: motion_idx * samples_per_motion + sample_idx
@@ -324,17 +325,22 @@ class MotionCollectionCommand(CommandTerm):
                     static_env_ids, :, :, :] -= anchor_vel[:, :, None, :]
 
     def _get_next_task(self) -> Optional[tuple[int, int]]:
-        """Get next incomplete (motion_idx, sample_idx) task."""
-        incomplete_mask = ~self.task_completed
-        if not incomplete_mask.any():
+        """Get next unassigned task and mark it as assigned."""
+        # Find tasks that are not started (status == 0)
+        unassigned_mask = self.task_status == 0
+        if not unassigned_mask.any():
             return None
         
-        # Find first incomplete task
-        incomplete_indices = torch.nonzero(incomplete_mask, as_tuple=False)
-        if len(incomplete_indices) == 0:
+        # Find first unassigned task
+        unassigned_indices = torch.nonzero(unassigned_mask, as_tuple=False)
+        if len(unassigned_indices) == 0:
             return None
         
-        motion_idx, sample_idx = incomplete_indices[0].tolist()
+        motion_idx, sample_idx = unassigned_indices[0].tolist()
+        
+        # Mark as assigned (-1) to prevent other envs from taking it
+        self.task_status[motion_idx, sample_idx] = -1
+        
         return (motion_idx, sample_idx)
 
     def _assign_task_to_env(self, env_id: int, motion_idx: int, sample_idx: int):
@@ -624,7 +630,8 @@ class MotionCollectionCommand(CommandTerm):
                                                      dim=-1)
         
         # Collection progress metrics
-        completed_count = self.task_completed.sum().item()
+        completed_count = (self.task_status == 1).sum().item()
+        assigned_count = (self.task_status == -1).sum().item()
         self.metrics["tasks_completed"][:] = completed_count
         self.metrics["tasks_total"][:] = self.total_tasks
         self.metrics["collection_progress"][:] = completed_count / max(self.total_tasks, 1)
@@ -650,13 +657,20 @@ class MotionCollectionCommand(CommandTerm):
             was_successful = self.time_steps[env_id_item] >= self.motion_length[env_id_item]
             
             if was_successful and self.env_task_assignment[env_id_item] >= 0:
-                # Mark current task as completed
+                # Mark current task as completed (1)
                 motion_id = self.motion_idx[env_id_item].item()
                 sample_id = self.sample_idx[env_id_item].item()
-                self.task_completed[motion_id, sample_id] = True
+                self.task_status[motion_id, sample_id] = 1
                 
+                completed_count = (self.task_status == 1).sum().item()
                 print(f"[Collection] Completed: Motion {motion_id}, Sample {sample_id} "
-                      f"({self.task_completed.sum().item()}/{self.total_tasks})")
+                      f"({completed_count}/{self.total_tasks})")
+            elif not was_successful and self.env_task_assignment[env_id_item] >= 0:
+                # Failed episode - reset task to unassigned (0) so it can be retried
+                motion_id = self.motion_idx[env_id_item].item()
+                sample_id = self.sample_idx[env_id_item].item()
+                self.task_status[motion_id, sample_id] = 0
+                print(f"[Collection] Failed: Motion {motion_id}, Sample {sample_id} - will retry")
             
             # Try to get next task
             next_task = self._get_next_task()

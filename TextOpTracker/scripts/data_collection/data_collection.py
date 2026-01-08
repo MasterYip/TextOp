@@ -404,8 +404,8 @@ def collect_data(cfg: DictConfig):
             # For deterministic mode: check if all tasks completed
             if collection_mode == "deterministic":
                 # Check collection progress from command term metrics
-                if hasattr(env_unwrapped.command_manager._terms["motion"], "task_completed"):
-                    tasks_completed = env_unwrapped.command_manager._terms["motion"].task_completed.sum().item()
+                if hasattr(env_unwrapped.command_manager._terms["motion"], "task_status"):
+                    tasks_completed = (env_unwrapped.command_manager._terms["motion"].task_status == 1).sum().item()
                     if tasks_completed >= target_episodes:
                         print(f"\n[INFO] All {target_episodes} tasks completed!")
                         break
