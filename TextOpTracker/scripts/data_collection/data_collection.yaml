@@ -26,7 +26,8 @@ checkpoint:
 
 # Motion data source
 motion:
-  pattern: "Data10k-open/*"  # Pattern to match in artifacts directory
+  # pattern: "Data10k-open/*"  # Pattern to match in artifacts directory
+  pattern: "selected_motions/*" 
   # Full path: artifacts/{pattern}/motion.npz
 
 # Data collection settings

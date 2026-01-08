@@ -5,6 +5,7 @@ from isaaclab.envs.mdp import *  # noqa: F401, F403
 from textop_tracker.tasks.tracking.mdp import *  # noqa: F401, F403
 
 # from .commands import *  # noqa: F401, F403
+from .commands_collection import MotionCollectionCommand, MotionCollectionCommandCfg
 from .commands_multi import *  # noqa: F401, F403
 from .events import *  # noqa: F401, F403
 from .observations import *  # noqa: F401, F403
