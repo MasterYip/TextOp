@@ -359,6 +359,11 @@ def collect_data(cfg: DictConfig):
                     # Apply quality filters
                     keep_episode = True
                     
+                    if ep_length < 2: # Ignore 1-step episodes (caused by env init)
+                        keep_episode = False
+                        total_episodes_collected -= 1  # Don't count zero-length episodes
+                        continue
+
                     # FIXME: idle is seted before data is sent back / time_outs not correct.
                     # Filter out idle env timeouts (all tasks completed, env is just waiting)
                     if collection_mode == "deterministic":

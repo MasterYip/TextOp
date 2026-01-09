@@ -363,12 +363,12 @@ class MotionCollectionCommand(CommandTerm):
         # Update buffers
         self._update_buffers(torch.tensor([env_id], device=self.device))
 
-    def _reset_to_idle(self, env_ids: torch.Tensor, state=1):
+    def _reset_to_idle(self, env_ids: torch.Tensor, state=None):
         """Reset idle environments to default pose to avoid termination."""
         if len(env_ids) == 0:
             return
-        
-        self.env_is_idle[env_ids] = state
+        if state is not None:
+            self.env_is_idle[env_ids] = state
         # -1 means first time being idle, will be set to 1 in `data_collection.py` after episode collected
         
         # Set to default/zero pose
@@ -685,7 +685,7 @@ class MotionCollectionCommand(CommandTerm):
                 if self.env_is_idle[env_id_item] == 0:
                     self._reset_to_idle(torch.tensor([env_id_item], device=self.device), -1)
                 else:
-                    self._reset_to_idle(torch.tensor([env_id_item], device=self.device), 1)
+                    self._reset_to_idle(torch.tensor([env_id_item], device=self.device))
                 continue
             
             # Assign new task (or reassign same task if it failed)
