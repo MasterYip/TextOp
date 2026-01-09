@@ -668,14 +668,14 @@ class MotionCollectionCommand(CommandTerm):
                     self.task_status[motion_id, sample_id] = 1
                     
                     completed_count = (self.task_status == 1).sum().item()
-                    print(f"[Collection] Env {env_id_item} Completed: Motion {motion_id}, Sample {sample_id} "
-                        f"({completed_count}/{self.total_tasks})")
+                    # print(f"[Collection] Env {env_id_item} Completed: Motion {motion_id}, Sample {sample_id} "
+                    #     f"({completed_count}/{self.total_tasks})")
                 else:
                     # Failed episode - reset task to unassigned (0) so it can be retried
                     motion_id = self.motion_idx[env_id_item].item()
                     sample_id = self.sample_idx[env_id_item].item()
                     self.task_status[motion_id, sample_id] = 0
-                    print(f"[Collection] Env {env_id_item} Failed: Motion {motion_id}, Sample {sample_id} - will retry")
+                    # print(f"[Collection] Env {env_id_item} Failed: Motion {motion_id}, Sample {sample_id} - will retry")
             
             # Try to get next task
             next_task = self._get_next_task()
@@ -767,7 +767,8 @@ class MotionCollectionCommand(CommandTerm):
         env_ids = torch.where(self.time_steps >= self.motion_length)[0]
         if hasattr(self.cfg, "motion_end_reset") and self.cfg.motion_end_reset:
             self.motion_end_reset_env_idx = self.time_steps >= self.motion_length
-        self._resample_command(env_ids)
+        else:
+            self._resample_command(env_ids)
 
         # Transform motion reference to robot frame (same as original)
         anchor_pos_w_repeat = self.anchor_pos_w[:, None, :].repeat(
