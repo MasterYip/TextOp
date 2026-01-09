@@ -190,7 +190,7 @@ def collect_data(cfg: DictConfig):
             body_names=env_cfg.commands.motion.body_names,
             motion_files=motion_files,
             samples_per_motion=samples_per_motion,
-            default_height=getattr(env_cfg.commands.motion, "default_height", 0.98),
+            default_height=getattr(env_cfg.commands.motion, "default_height", 2.0),
             pose_range=getattr(env_cfg.commands.motion, "pose_range", {}),
             velocity_range=getattr(env_cfg.commands.motion, "velocity_range", {}),
             joint_position_range=getattr(env_cfg.commands.motion, "joint_position_range", (-0.52, 0.52)),
@@ -363,12 +363,18 @@ def collect_data(cfg: DictConfig):
                     # Filter out idle env timeouts (all tasks completed, env is just waiting)
                     if collection_mode == "deterministic":
                         # Check if env is idle from command manager metrics
-                        if env_unwrapped.command_manager._terms["motion"].env_is_idle[env_idx]:
+                        if env_unwrapped.command_manager._terms["motion"].env_is_idle[env_idx] == -1:
+                            # Collect this episode, mark as idle
+                            print(f"[INFO] Env {env_idx} is idle - marking episode as complete")
+                            env_unwrapped.command_manager._terms["motion"].env_is_idle[env_idx] = 1
+                            # total_episodes_collected -= 1
+                            # keep_episode = False
+                        elif env_unwrapped.command_manager._terms["motion"].env_is_idle[env_idx] == 1:
                             # Skip idle env timeouts
                             keep_episode = False
                             total_episodes_collected -= 1  # Don't count towards collected
                         
-                        # In deterministic mode, only keep if time_out or motion_end (and not idle)
+                        # In deterministic mode, discard terminated (and not idle)
                         elif not infos["time_outs"][env_idx]:
                             keep_episode = False
 
@@ -416,14 +422,6 @@ def collect_data(cfg: DictConfig):
                         # Only reset noise for this specific environment
                         noise_generator.state[env_idx] = noise_generator.mu
             
-            # For deterministic mode: check if all tasks completed
-            if collection_mode == "deterministic":
-                # Check collection progress from command term metrics
-                if hasattr(env_unwrapped.command_manager._terms["motion"], "task_status"):
-                    tasks_completed = (env_unwrapped.command_manager._terms["motion"].task_status == 1).sum().item()
-                    if tasks_completed >= target_episodes:
-                        print(f"\n[INFO] All {target_episodes} tasks completed!")
-                        break
     
     pbar.close()
     

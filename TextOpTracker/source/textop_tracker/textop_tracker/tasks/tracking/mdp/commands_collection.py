@@ -185,7 +185,7 @@ class MotionCollectionCommand(CommandTerm):
                                              dtype=torch.long, device=self.device)
         
         # Track if env is idle (all tasks done)
-        self.env_is_idle = torch.zeros(self.num_envs, dtype=torch.bool,
+        self.env_is_idle = torch.zeros(self.num_envs, dtype=torch.long,
                                        device=self.device)
         
         # Motion and time tracking (same as original)
@@ -363,12 +363,13 @@ class MotionCollectionCommand(CommandTerm):
         # Update buffers
         self._update_buffers(torch.tensor([env_id], device=self.device))
 
-    def _reset_to_idle(self, env_ids: torch.Tensor):
+    def _reset_to_idle(self, env_ids: torch.Tensor, state=1):
         """Reset idle environments to default pose to avoid termination."""
         if len(env_ids) == 0:
             return
         
-        self.env_is_idle[env_ids] = True
+        self.env_is_idle[env_ids] = state
+        # -1 means first time being idle, will be set to 1 in `data_collection.py` after episode collected
         
         # Set to default/zero pose
         joint_dim = self.joint_pos_buffer.shape[2]
@@ -659,28 +660,32 @@ class MotionCollectionCommand(CommandTerm):
             # Use termination manager to judge: success if not failed and not timed out
             was_successful = ~self._env.termination_manager.terminated[env_id]  # type: ignore
             
-            if was_successful and self.env_task_assignment[env_id_item] >= 0:
-                # Mark current task as completed (1)
-                motion_id = self.motion_idx[env_id_item].item()
-                sample_id = self.sample_idx[env_id_item].item()
-                self.task_status[motion_id, sample_id] = 1
-                
-                completed_count = (self.task_status == 1).sum().item()
-                print(f"[Collection] Completed: Motion {motion_id}, Sample {sample_id} "
-                      f"({completed_count}/{self.total_tasks})")
-            elif not was_successful and not self.env_is_idle[env_id_item] and self.env_task_assignment[env_id_item] >= 0:
-                # Failed episode - reset task to unassigned (0) so it can be retried
-                motion_id = self.motion_idx[env_id_item].item()
-                sample_id = self.sample_idx[env_id_item].item()
-                self.task_status[motion_id, sample_id] = 0
-                print(f"[Collection] Failed: Motion {motion_id}, Sample {sample_id} - will retry")
+            if self.env_is_idle[env_id_item]==0 and self.env_task_assignment[env_id_item] >= 0 :
+                if was_successful:
+                    # Mark current task as completed (1)
+                    motion_id = self.motion_idx[env_id_item].item()
+                    sample_id = self.sample_idx[env_id_item].item()
+                    self.task_status[motion_id, sample_id] = 1
+                    
+                    completed_count = (self.task_status == 1).sum().item()
+                    print(f"[Collection] Env {env_id_item} Completed: Motion {motion_id}, Sample {sample_id} "
+                        f"({completed_count}/{self.total_tasks})")
+                else:
+                    # Failed episode - reset task to unassigned (0) so it can be retried
+                    motion_id = self.motion_idx[env_id_item].item()
+                    sample_id = self.sample_idx[env_id_item].item()
+                    self.task_status[motion_id, sample_id] = 0
+                    print(f"[Collection] Env {env_id_item} Failed: Motion {motion_id}, Sample {sample_id} - will retry")
             
             # Try to get next task
             next_task = self._get_next_task()
             
             if next_task is None:
                 # All tasks completed - set to idle
-                self._reset_to_idle(torch.tensor([env_id_item], device=self.device))
+                if self.env_is_idle[env_id_item] == 0:
+                    self._reset_to_idle(torch.tensor([env_id_item], device=self.device), -1)
+                else:
+                    self._reset_to_idle(torch.tensor([env_id_item], device=self.device), 1)
                 continue
             
             # Assign new task (or reassign same task if it failed)
@@ -755,7 +760,7 @@ class MotionCollectionCommand(CommandTerm):
     def _update_command(self):
         """Update command each step."""
         # Only advance time for non-idle envs
-        active_mask = ~self.env_is_idle
+        active_mask = self.env_is_idle == 0
         self.time_steps[active_mask] += 1
         
         # Find envs that reached motion end
