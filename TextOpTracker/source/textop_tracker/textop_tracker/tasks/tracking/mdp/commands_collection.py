@@ -653,48 +653,70 @@ class MotionCollectionCommand(CommandTerm):
         if len(env_ids) == 0:
             return
 
-        for env_id in env_ids:
-            env_id_item = env_id.item()
-            
-            # Check if episode completed successfully
-            # Use termination manager to judge: success if not failed and not timed out
-            was_successful = ~self._env.termination_manager.terminated[env_id]  # type: ignore
-            
-            if self.env_is_idle[env_id_item]==0 and self.env_task_assignment[env_id_item] >= 0 :
-                if was_successful:
-                    # Mark current task as completed (1)
-                    motion_id = self.motion_idx[env_id_item].item()
-                    sample_id = self.sample_idx[env_id_item].item()
-                    self.task_status[motion_id, sample_id] = 1
-                    
-                    completed_count = (self.task_status == 1).sum().item()
-                    # print(f"[Collection] Env {env_id_item} Completed: Motion {motion_id}, Sample {sample_id} "
-                    #     f"({completed_count}/{self.total_tasks})")
-                else:
-                    # Failed episode - reset task to unassigned (0) so it can be retried
-                    motion_id = self.motion_idx[env_id_item].item()
-                    sample_id = self.sample_idx[env_id_item].item()
-                    self.task_status[motion_id, sample_id] = 0
-                    # print(f"[Collection] Env {env_id_item} Failed: Motion {motion_id}, Sample {sample_id} - will retry")
-            
-            # Try to get next task
+        # Ensure env_ids is a 1D tensor on the right device
+        env_ids = env_ids.to(device=self.device).view(-1)
+
+        # Determine which of these envs were successful (not terminated by failure/time-out)
+        was_successful = ~self._env.termination_manager.terminated[env_ids]  # type: ignore
+
+        # Active envs are those not idle and with a valid task assignment
+        active_mask = (self.env_is_idle[env_ids] == 0) & (self.env_task_assignment[env_ids] >= 0)
+        active_envs = env_ids[active_mask]
+
+        # Split active envs into success/failure
+        if active_envs.numel() > 0:
+            succ_mask = was_successful[active_mask]
+            fail_mask = ~succ_mask
+
+            # Handle successes in batch
+            if succ_mask.any():
+                succ_envs = active_envs[succ_mask]
+                motion_ids = self.motion_idx[succ_envs]
+                sample_ids = self.sample_idx[succ_envs]
+                self.task_status[motion_ids, sample_ids] = 1
+                completed_count = (self.task_status == 1).sum().item()
+                # for e, m, s in zip(succ_envs.tolist(), motion_ids.tolist(), sample_ids.tolist()):
+                #     print(f"[Collection] Env {e} Completed: Motion {m}, Sample {s} ({completed_count}/{self.total_tasks})")
+
+            # Handle failures in batch (mark as unassigned to retry)
+            if fail_mask.any():
+                fail_envs = active_envs[fail_mask]
+                motion_ids = self.motion_idx[fail_envs]
+                sample_ids = self.sample_idx[fail_envs]
+                self.task_status[motion_ids, sample_ids] = 0
+                for e, m, s in zip(fail_envs.tolist(), motion_ids.tolist(), sample_ids.tolist()):
+                    print(f"[Collection] Env {e} Failed: Motion {m}, Sample {s} - will retry")
+
+        # Determine next actions for each env: either assign next task or set idle
+        assign_list = []
+        idle_first_list = []
+        idle_repeat_list = []
+
+        for e in env_ids.tolist():
             next_task = self._get_next_task()
-            
             if next_task is None:
-                # All tasks completed - set to idle
-                if self.env_is_idle[env_id_item] == 0:
-                    self._reset_to_idle(torch.tensor([env_id_item], device=self.device), -1)
+                if self.env_is_idle[e] == 0:
+                    idle_first_list.append(e)
                 else:
-                    self._reset_to_idle(torch.tensor([env_id_item], device=self.device))
-                continue
-            
-            # Assign new task (or reassign same task if it failed)
-            motion_idx, sample_idx = next_task
-            self._assign_task_to_env(env_id_item, motion_idx, sample_idx)
-            
-            # Apply randomization to initial state
-            self._apply_initialization_randomization(torch.tensor([env_id_item],
-                                                                  device=self.device))
+                    idle_repeat_list.append(e)
+            else:
+                assign_list.append((e, next_task[0], next_task[1]))
+
+        # Reset to idle in batch (first-time and repeat separately to set state flag)
+        if len(idle_first_list) > 0:
+            self._reset_to_idle(torch.tensor(idle_first_list, device=self.device), -1)
+        if len(idle_repeat_list) > 0:
+            self._reset_to_idle(torch.tensor(idle_repeat_list, device=self.device))
+
+        # Assign tasks (loop per-env is okay; heavy ops are buffered; randomization will be batched)
+        assigned_env_ids = []
+        for e, m, s in assign_list:
+            self._assign_task_to_env(e, m, s)
+            assigned_env_ids.append(e)
+
+        # Apply initialization randomization in batch for all newly assigned envs
+        if len(assigned_env_ids) > 0:
+            self._apply_initialization_randomization(torch.tensor(assigned_env_ids, device=self.device))
 
     def _apply_initialization_randomization(self, env_ids: torch.Tensor):
         """Apply pose/velocity/joint randomization on episode start."""
