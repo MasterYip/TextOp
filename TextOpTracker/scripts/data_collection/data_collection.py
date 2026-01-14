@@ -379,7 +379,7 @@ def collect_data(cfg: DictConfig):
                             keep_episode = False
 
                     # Filter by episode length: If is shorter than min length, discard
-                    if collection_mode=="standard" and ep_length < cfg.collection.min_episode_length:
+                    if ep_length < cfg.collection.min_episode_length:
                         keep_episode = False
                     
                     # Filter by mean reward (if specified)
