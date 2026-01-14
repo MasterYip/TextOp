@@ -18,6 +18,7 @@ import sys
 import argparse
 import numpy as np
 import torch
+import threading
 from pathlib import Path
 
 from isaaclab.app import AppLauncher
@@ -27,7 +28,7 @@ parser = argparse.ArgumentParser(description="Replay collected dataset episodes 
 parser.add_argument("--zarr_path", type=str, required=True, help="Path to zarr dataset file")
 parser.add_argument("--num_episodes", type=int, default=None, help="Number of episodes to replay (from start)")
 parser.add_argument("--episode_ids", type=int, nargs='+', default=None, help="Specific episode IDs to replay")
-parser.add_argument("--max_envs", type=int, default=50, help="Maximum number of environments to create")
+parser.add_argument("--max_envs", type=int, default=500, help="Maximum number of environments to create")
 parser.add_argument("--slow_motion", type=float, default=1.0, help="Slow motion factor (1.0 = normal speed, 0.5 = half speed)")
 
 # append AppLauncher cli args
@@ -55,6 +56,160 @@ from replay_buffer import ReplayBuffer
 # Pre-defined configs
 ##
 from textop_tracker.robots.g1 import G1_CYLINDER_CFG
+
+
+class KeyboardController:
+    """Interactive keyboard controller for playback control in a separate thread."""
+    
+    def __init__(self):
+        self.paused = False
+        self.step_command = 0  # +1 for right, -1 for left, +10 for ctrl+right, -10 for ctrl+left
+        self._stop_event = threading.Event()
+        self._input_thread = None
+        self._lock = threading.Lock()
+        
+    def start(self):
+        """Start the keyboard input thread."""
+        self._stop_event.clear()
+        self._input_thread = threading.Thread(target=self._input_worker, daemon=True)
+        self._input_thread.start()
+        
+    def stop(self):
+        """Stop the keyboard input thread."""
+        self._stop_event.set()
+        if self._input_thread is not None:
+            self._input_thread.join(timeout=2.0)
+    
+    def get_state(self):
+        """Get current playback state (thread-safe)."""
+        with self._lock:
+            return self.paused, self.step_command
+    
+    def consume_step(self):
+        """Consume and return the step command, resetting it to 0."""
+        with self._lock:
+            step = self.step_command
+            self.step_command = 0
+            return step
+    
+    def _input_worker(self):
+        """Background thread for keyboard input."""
+        try:
+            import carb
+            print("\n" + "="*70)
+            print("KEYBOARD CONTROLS")
+            print("="*70)
+            print("  SPACE       : Pause/Resume playback")
+            print("  LEFT/RIGHT  : Step ±1 frame (when paused)")
+            print("  CTRL+LEFT   : Step -10 frames (when paused)")
+            print("  CTRL+RIGHT  : Step +10 frames (when paused)")
+            print("  Ctrl+C      : Exit")
+            print("="*70 + "\n")
+            
+            # Use carb input for keyboard handling in Isaac Sim
+            from omni.isaac.kit import SimulationApp
+            
+            # Register keyboard callback
+            self._setup_keyboard_callbacks()
+            
+        except Exception as e:
+            print(f"[WARNING] Could not set up keyboard controls: {e}")
+            print("[INFO] Using fallback text input mode")
+            self._text_input_fallback()
+    
+    def _setup_keyboard_callbacks(self):
+        """Set up keyboard callbacks using carb."""
+        try:
+            import carb.input
+            from omni.appwindow import get_default_app_window
+            
+            app_window = get_default_app_window()
+            input_interface = carb.input.acquire_input_interface()
+            keyboard = app_window.get_keyboard()
+            
+            # Track key states
+            self.ctrl_pressed = False
+            
+            def on_keyboard_event(event):
+                if event.type == carb.input.KeyboardEventType.KEY_PRESS:
+                    # Check for Ctrl key
+                    if event.input == carb.input.KeyboardInput.LEFT_CONTROL or \
+                       event.input == carb.input.KeyboardInput.RIGHT_CONTROL:
+                        self.ctrl_pressed = True
+                    
+                    # Space: toggle pause
+                    elif event.input == carb.input.KeyboardInput.SPACE:
+                        with self._lock:
+                            self.paused = not self.paused
+                            print(f"\n[Keyboard] {'PAUSED' if self.paused else 'RESUMED'}")
+                    
+                    # Left arrow
+                    elif event.input == carb.input.KeyboardInput.LEFT:
+                        if self.paused:
+                            with self._lock:
+                                self.step_command = -10 if self.ctrl_pressed else -1
+                                print(f"[Keyboard] Step {self.step_command} frames")
+                    
+                    # Right arrow
+                    elif event.input == carb.input.KeyboardInput.RIGHT:
+                        if self.paused:
+                            with self._lock:
+                                self.step_command = +10 if self.ctrl_pressed else +1
+                                print(f"[Keyboard] Step {self.step_command} frames")
+                
+                elif event.type == carb.input.KeyboardEventType.KEY_RELEASE:
+                    if event.input == carb.input.KeyboardInput.LEFT_CONTROL or \
+                       event.input == carb.input.KeyboardInput.RIGHT_CONTROL:
+                        self.ctrl_pressed = False
+                
+                return True
+            
+            # Subscribe to keyboard events
+            self._keyboard_sub = input_interface.subscribe_to_keyboard_events(keyboard, on_keyboard_event)
+            print("[INFO] Keyboard controls active (using carb.input)")
+            
+        except Exception as e:
+            print(f"[WARNING] Carb keyboard setup failed: {e}")
+            self._text_input_fallback()
+    
+    def _text_input_fallback(self):
+        """Fallback to text input if keyboard handling fails."""
+        print("\n[INFO] Text input mode: Type commands and press Enter")
+        print("  Commands: 'p' (pause/resume), 'l' (step left), 'r' (step right)")
+        
+        while not self._stop_event.is_set():
+            try:
+                cmd = input("> ").strip().lower()
+                
+                if cmd == 'p':
+                    with self._lock:
+                        self.paused = not self.paused
+                        print(f"{'PAUSED' if self.paused else 'RESUMED'}")
+                elif cmd == 'l':
+                    if self.paused:
+                        with self._lock:
+                            self.step_command = -1
+                            print("Step -1 frame")
+                elif cmd == 'r':
+                    if self.paused:
+                        with self._lock:
+                            self.step_command = +1
+                            print("Step +1 frame")
+                elif cmd == 'll':
+                    if self.paused:
+                        with self._lock:
+                            self.step_command = -10
+                            print("Step -10 frames")
+                elif cmd == 'rr':
+                    if self.paused:
+                        with self._lock:
+                            self.step_command = +10
+                            print("Step +10 frames")
+                            
+            except (EOFError, KeyboardInterrupt):
+                break
+            except Exception as e:
+                print(f"[ERROR] Input error: {e}")
 
 
 @configclass
@@ -106,22 +261,48 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene, buf
     for env_idx, ep_id in enumerate(episode_ids[:num_envs]):
         print(f"  [ENV {env_idx}] Episode {ep_id} ({episode_lengths[env_idx]} frames)")
 
+    # Initialize keyboard controller
+    keyboard_ctrl = KeyboardController()
+    keyboard_ctrl.start()
+
     # Simulation loop
     print("\n[INFO] Starting replay simulation...")
     print(f"[INFO] Slow motion factor: {slow_motion}x")
-    print("[INFO] Press Ctrl+C to stop\n")
     
     frame_counter = 0
     
     while simulation_app.is_running():
-        # Apply slow motion by skipping frames
-        if slow_motion < 1.0:
-            if frame_counter % int(1.0 / slow_motion) != 0:
-                frame_counter += 1
-                sim.render()
-                continue
+        # Get keyboard state
+        paused, step_cmd = keyboard_ctrl.get_state()
         
-        time_steps += 1
+        # Handle stepping when paused
+        if paused and step_cmd != 0:
+            # Consume the step command
+            step = keyboard_ctrl.consume_step()
+            time_steps += step
+            
+            # Clamp time steps to valid range
+            for env_idx in range(num_envs):
+                if time_steps[env_idx] < 0:
+                    time_steps[env_idx] = 0
+                elif time_steps[env_idx] >= episode_lengths[env_idx]:
+                    time_steps[env_idx] = episode_lengths[env_idx] - 1
+
+        elif paused:
+            # Paused without step command - just render without advancing
+            sim.render()
+            frame_counter += 1
+            continue
+        else:
+            # Normal playback - apply slow motion
+            if slow_motion < 1.0:
+                if frame_counter % int(1.0 / slow_motion) != 0:
+                    frame_counter += 1
+                    sim.render()
+                    continue
+            
+            # Advance time
+            time_steps += 1
         
         # Reset environments that reached end of their episode
         for env_idx in range(num_envs):
@@ -164,12 +345,15 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene, buf
         sim.render()  # We don't want physics (sim.step())
         scene.update(sim_dt)
 
-        # Camera follows first environment
-        pos_lookat = root_states[0, :3].cpu().numpy()
-        if time_steps[0] < 10:
-            sim.set_camera_view(pos_lookat + np.array([3.0, 3.0, 1.5]), pos_lookat)
+        # # Camera follows first environment
+        # pos_lookat = root_states[0, :3].cpu().numpy()
+        # if time_steps[0] < 10:
+        #     sim.set_camera_view(pos_lookat + np.array([3.0, 3.0, 1.5]), pos_lookat)
         
         frame_counter += 1
+    
+    # Clean up keyboard controller
+    keyboard_ctrl.stop()
 
 
 def main():
