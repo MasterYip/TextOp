@@ -705,8 +705,8 @@ class MotionCollectionCommand(CommandTerm):
         # Reset to idle in batch (first-time and repeat separately to set state flag)
         if len(idle_first_list) > 0:
             self._reset_to_idle(torch.tensor(idle_first_list, device=self.device), -1)
-        if len(idle_repeat_list) > 0:
-            self._reset_to_idle(torch.tensor(idle_repeat_list, device=self.device))
+        # if len(idle_repeat_list) > 0:
+        #     self._reset_to_idle(torch.tensor(idle_repeat_list, device=self.device))
 
         # Assign tasks (loop per-env is okay; heavy ops are buffered; randomization will be batched)
         assigned_env_ids = []

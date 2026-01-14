@@ -48,7 +48,7 @@ collection:
   #   - Failed episodes reassigned, not counted
   #   - No random start position
 
-  min_episode_length: 300  # Minimum episode length for quality filter
+  min_episode_length: 100  # Minimum episode length for quality filter
   min_mean_reward: null  # Optional: minimum mean reward per episode
 
 # Action noise injection (following BeyondMimic)
