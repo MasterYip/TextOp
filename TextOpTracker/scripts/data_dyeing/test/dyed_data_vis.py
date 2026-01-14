@@ -32,6 +32,11 @@ import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 from matplotlib.gridspec import GridSpec
 from sklearn.manifold import TSNE
+try:
+    import umap
+    UMAP_AVAILABLE = True
+except ImportError:
+    UMAP_AVAILABLE = False
 import yaml
 
 # Import MotionCLIP as package
@@ -361,16 +366,19 @@ class DyedDataVisualizer:
         
         return output_path
     
-    def visualize_tsne_trajectory(self, episode_idx=0, output_path=None):
+    def visualize_tsne_trajectory(self, episode_idx=0, output_path=None, method='umap', n_neighbors=15, min_dist=0.1):
         """
-        Visualize episode trajectory in t-SNE semantic space.
+        Visualize episode trajectory in low-dimensional semantic space.
         
         Args:
             episode_idx: Episode index to visualize
             output_path: Output image path (if None, uses default)
+            method: Dimensionality reduction method ('umap' or 'tsne')
+            n_neighbors: UMAP parameter - number of neighbors (default: 15)
+            min_dist: UMAP parameter - minimum distance (default: 0.1)
         """
         print(f"\n{'='*80}")
-        print(f"Visualizing Episode {episode_idx} t-SNE Trajectory")
+        print(f"Visualizing Episode {episode_idx} {method.upper()} Trajectory")
         print(f"{'='*80}\n")
         
         # Get episode motion latents
@@ -412,18 +420,45 @@ class DyedDataVisualizer:
             print("Warning: No reference motions found")
             ref_latents = np.zeros((0, episode_latents.shape[1]))
         
-        # Combine episode and reference latents
-        all_latents = np.vstack([ref_latents, episode_latents])
-        
-        # Perform t-SNE
-        print("Performing t-SNE dimensionality reduction...")
-        perplexity = min(30, max(5, len(all_latents) // 3))
-        tsne = TSNE(n_components=2, random_state=42, perplexity=perplexity)
-        all_tsne = tsne.fit_transform(all_latents)
-        
-        # Split back into reference and episode
-        ref_tsne = all_tsne[:len(ref_latents)]
-        episode_tsne = all_tsne[len(ref_latents):]
+        # Perform dimensionality reduction
+        if method.lower() == 'umap':
+            if not UMAP_AVAILABLE:
+                raise ImportError("UMAP is not installed. Install with: pip install umap-learn")
+            
+            print(f"Fitting UMAP on {len(ref_latents)} reference motions...")
+            print(f"  n_neighbors={n_neighbors}, min_dist={min_dist}")
+            
+            # Fit UMAP only on reference motions
+            reducer = umap.UMAP(
+                n_components=2,
+                n_neighbors=n_neighbors,
+                min_dist=min_dist,
+                random_state=42,
+                metric='cosine'
+            )
+            ref_tsne = reducer.fit_transform(ref_latents)
+            
+            # Project episode trajectory into the fitted space
+            print(f"Projecting {len(episode_latents)} episode frames into fitted space...")
+            episode_tsne = reducer.transform(episode_latents)
+            
+        elif method.lower() == 'tsne':
+            print("Note: t-SNE doesn't support separate fitting and projection.")
+            
+            # Combine episode and reference latents
+            all_latents = np.vstack([ref_latents, episode_latents])
+            
+            # Perform t-SNE
+            perplexity = min(30, max(5, len(all_latents) // 3))
+            tsne = TSNE(n_components=2, random_state=42, perplexity=perplexity)
+            all_tsne = tsne.fit_transform(all_latents)
+            
+            # Split back into reference and episode
+            ref_tsne = all_tsne[:len(ref_latents)]
+            episode_tsne = all_tsne[len(ref_latents):]
+            
+        else:
+            raise ValueError(f"Unknown method: {method}. Use 'umap' or 'tsne'")
         
         # Visualize
         fig, ax = plt.subplots(figsize=(14, 10))
@@ -461,21 +496,21 @@ class DyedDataVisualizer:
         # Add colorbar for time progression
         cbar = plt.colorbar(scatter, ax=ax, label='Frame Number')
         
-        ax.set_title(f'Episode {episode_idx} Trajectory in t-SNE CLIP Latent Space', fontsize=16)
-        ax.set_xlabel('t-SNE Component 1', fontsize=12)
-        ax.set_ylabel('t-SNE Component 2', fontsize=12)
+        ax.set_title(f'Episode {episode_idx} Trajectory in {method.upper()} CLIP Latent Space', fontsize=16)
+        ax.set_xlabel(f'{method.upper()} Component 1', fontsize=12)
+        ax.set_ylabel(f'{method.upper()} Component 2', fontsize=12)
         ax.legend(loc='best', fontsize=10, ncol=2)
         ax.grid(True, alpha=0.3)
         plt.tight_layout()
         
         # Save
         if output_path is None:
-            output_path = SCRIPT_DIR / f"episode_{episode_idx}_tsne.png"
+            output_path = SCRIPT_DIR / f"episode_{episode_idx}_{method}.png"
         
         plt.savefig(output_path, dpi=300, bbox_inches='tight')
         plt.close()
         
-        print(f"✓ t-SNE visualization saved to: {output_path}")
+        print(f"✓ {method.upper()} visualization saved to: {output_path}")
         print(f"{'='*80}\n")
 
 
@@ -505,6 +540,12 @@ def main():
                        help='Format for saved embeddings (default: txt)')
     parser.add_argument('--only-embeddings', action='store_true',
                        help='Only save embeddings, skip visualizations')
+    parser.add_argument('--dim-reduction', type=str, default='umap', choices=['umap', 'tsne'],
+                       help='Dimensionality reduction method for trajectory visualization (default: umap)')
+    parser.add_argument('--umap-neighbors', type=int, default=15,
+                       help='UMAP n_neighbors parameter (default: 15)')
+    parser.add_argument('--umap-min-dist', type=float, default=0.1,
+                       help='UMAP min_dist parameter (default: 0.1)')
     
     args = parser.parse_args()
     
@@ -623,13 +664,16 @@ def main():
         )
         all_videos.append(video_path)
         
-        # 2. t-SNE trajectory visualization
-        tsne_path = output_dir / f"episode_{episode_idx}_tsne.png"
+        # 2. Dimensionality reduction trajectory visualization
+        dim_red_path = output_dir / f"episode_{episode_idx}_{args.dim_reduction}.png"
         visualizer.visualize_tsne_trajectory(
             episode_idx=episode_idx,
-            output_path=tsne_path
+            output_path=dim_red_path,
+            method=args.dim_reduction,
+            n_neighbors=args.umap_neighbors,
+            min_dist=args.umap_min_dist
         )
-        all_tsne.append(tsne_path)
+        all_tsne.append(dim_red_path)
     
     print("\n" + "="*80)
     print("ALL VISUALIZATIONS COMPLETE!")
@@ -646,7 +690,7 @@ def main():
             if all_videos:
                 print(f"    Video: {all_videos[idx]}")
             if all_tsne:
-                print(f"    t-SNE: {all_tsne[idx]}")
+                print(f"    {args.dim_reduction.upper()}: {all_tsne[idx]}")
             if all_embeddings:
                 print(f"    Embeddings: {all_embeddings[idx]}")
 
