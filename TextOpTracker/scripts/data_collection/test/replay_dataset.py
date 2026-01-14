@@ -99,7 +99,7 @@ class KeyboardController:
             print("\n" + "="*70)
             print("KEYBOARD CONTROLS")
             print("="*70)
-            print("  SPACE       : Pause/Resume playback")
+            print("  P           : Pause/Resume playback")
             print("  LEFT/RIGHT  : Step ±1 frame (when paused)")
             print("  CTRL+LEFT   : Step -10 frames (when paused)")
             print("  CTRL+RIGHT  : Step +10 frames (when paused)")
@@ -137,8 +137,8 @@ class KeyboardController:
                        event.input == carb.input.KeyboardInput.RIGHT_CONTROL:
                         self.ctrl_pressed = True
                     
-                    # Space: toggle pause
-                    elif event.input == carb.input.KeyboardInput.SPACE:
+                    # P key: toggle pause
+                    elif event.input == carb.input.KeyboardInput.P:
                         with self._lock:
                             self.paused = not self.paused
                             print(f"\n[Keyboard] {'PAUSED' if self.paused else 'RESUMED'}")
@@ -287,7 +287,7 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene, buf
                     time_steps[env_idx] = 0
                 elif time_steps[env_idx] >= episode_lengths[env_idx]:
                     time_steps[env_idx] = episode_lengths[env_idx] - 1
-
+            print(f"[INFO] Time steps after stepping: {time_steps.tolist()}")
         elif paused:
             # Paused without step command - just render without advancing
             sim.render()

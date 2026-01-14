@@ -270,6 +270,9 @@ def collect_data(cfg: DictConfig):
     episode_lengths = np.zeros(cfg.task.num_envs, dtype=np.int32)
     episode_rewards = np.zeros(cfg.task.num_envs, dtype=np.float32)
     
+    # Track which envs just reset (to skip storing their first frame)
+    env_just_reset = np.ones(cfg.task.num_envs, dtype=bool)  # All envs start as "just reset"
+    
     # Statistics tracking
     total_saved_steps = 0
     total_episodes_collected = 0
@@ -319,17 +322,22 @@ def collect_data(cfg: DictConfig):
                 for key, value in robot_state.items()
             }
             
-            # Store current state and action for all envs
+            # Store current state and action for all envs (EXCEPT those that just reset)
+            # This ensures we don't store the inconsistent first frame after reset
             for env_idx in range(cfg.task.num_envs):
-                episode_data["act"][env_idx].append(actions[env_idx].cpu().numpy())
-                episode_data["body_pos"][env_idx].append(robot_state_np["body_pos"][env_idx])
-                episode_data["body_rot"][env_idx].append(robot_state_np["body_rot"][env_idx])
-                episode_data["body_lin_vel"][env_idx].append(robot_state_np["body_lin_vel"][env_idx])
-                episode_data["body_ang_vel"][env_idx].append(robot_state_np["body_ang_vel"][env_idx])
-                episode_data["joint_pos"][env_idx].append(robot_state_np["joint_pos"][env_idx])
-                episode_data["joint_vel"][env_idx].append(robot_state_np["joint_vel"][env_idx])
-                episode_data["root_pos"][env_idx].append(robot_state_np["root_pos"][env_idx])
-                episode_data["root_rot"][env_idx].append(robot_state_np["root_rot"][env_idx])
+                if not env_just_reset[env_idx]:  # Only store if env did NOT just reset
+                    episode_data["act"][env_idx].append(actions[env_idx].cpu().numpy())
+                    episode_data["body_pos"][env_idx].append(robot_state_np["body_pos"][env_idx])
+                    episode_data["body_rot"][env_idx].append(robot_state_np["body_rot"][env_idx])
+                    episode_data["body_lin_vel"][env_idx].append(robot_state_np["body_lin_vel"][env_idx])
+                    episode_data["body_ang_vel"][env_idx].append(robot_state_np["body_ang_vel"][env_idx])
+                    episode_data["joint_pos"][env_idx].append(robot_state_np["joint_pos"][env_idx])
+                    episode_data["joint_vel"][env_idx].append(robot_state_np["joint_vel"][env_idx])
+                    episode_data["root_pos"][env_idx].append(robot_state_np["root_pos"][env_idx])
+                    episode_data["root_rot"][env_idx].append(robot_state_np["root_rot"][env_idx])
+                else:
+                    # This env just reset, mark as no longer fresh after this iteration
+                    env_just_reset[env_idx] = False
             
             # Apply action noise if enabled
             if noise_generator is not None:
@@ -359,7 +367,7 @@ def collect_data(cfg: DictConfig):
                     # Apply quality filters
                     keep_episode = True
                     
-                    if ep_length < 2: # Ignore 1-step episodes (caused by env init)
+                    if ep_length < 5: # Ignore 1-step episodes (caused by env init)
                         keep_episode = False
                         total_episodes_collected -= 1  # Don't count zero-length episodes
                         continue
@@ -416,6 +424,9 @@ def collect_data(cfg: DictConfig):
                         episode_data[key][env_idx] = []
                     episode_lengths[env_idx] = 0
                     episode_rewards[env_idx] = 0
+                    
+                    # Mark this env as just reset (to skip storing first frame)
+                    env_just_reset[env_idx] = True
                     
                     # Reset noise for finished environments if noise is enabled
                     if noise_generator is not None:

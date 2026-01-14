@@ -819,7 +819,8 @@ class MotionCommand(CommandTerm):
         env_ids = torch.where(self.time_steps >= self.motion_length)[0]
         if hasattr(self.cfg, "motion_end_reset") and self.cfg.motion_end_reset:
             self.motion_end_reset_env_idx = self.time_steps >= self.motion_length
-        self._resample_command(env_ids)
+        else:
+            self._resample_command(env_ids)
 
         anchor_pos_w_repeat = self.anchor_pos_w[:, None, :].repeat(
             1, len(self.cfg.body_names), 1)
