@@ -158,6 +158,21 @@ class MotionDataDyer:
         print(f"  Total episodes: {self.buffer.n_episodes}")
         print(f"  Fields: {list(self.buffer.data.keys())}")
         
+        # Pre-compute episode indices for each frame
+        # This maps each frame to its episode index and boundaries
+        episode_ends = self.buffer.episode_ends[:]
+        self.frame_to_episode = np.zeros(self.total_frames, dtype=np.int64)
+        self.episode_starts = np.zeros(len(episode_ends), dtype=np.int64)
+        self.episode_ends_arr = episode_ends.copy()
+        
+        for ep_idx in range(len(episode_ends)):
+            start = 0 if ep_idx == 0 else episode_ends[ep_idx - 1]
+            end = episode_ends[ep_idx]
+            self.episode_starts[ep_idx] = start
+            self.frame_to_episode[start:end] = ep_idx
+        
+        print(f"  Episode boundaries computed")
+        
         # Check required fields
         required_fields = ['body_pos', 'body_rot']
         for field in required_fields:
@@ -340,6 +355,11 @@ class MotionDataDyer:
     
     def _extract_window(self, center_idx):
         """Extract motion window for a specific frame."""
+        # Determine which episode this frame belongs to
+        episode_idx = self.frame_to_episode[center_idx]
+        episode_start = self.episode_starts[episode_idx]
+        episode_end = self.episode_ends_arr[episode_idx]
+        
         # Create data dict from buffer
         data_dict = {
             'body_pos': self.buffer['body_pos'][:],
@@ -365,7 +385,9 @@ class MotionDataDyer:
             data_dict,
             center_idx,
             origin_window_size,
-            self.cfg.encoding.boundary_mode
+            self.cfg.encoding.boundary_mode,
+            episode_start=episode_start,
+            episode_end=episode_end
         )
         
         # Resample to target FPS if needed

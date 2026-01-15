@@ -133,48 +133,65 @@ class G1MotionConverter:
         return data.to(self.device)
 
 
-def extract_motion_window(data_dict, center_idx, window_size, boundary_mode='pad'):
+def extract_motion_window(data_dict, center_idx, window_size, boundary_mode='pad', episode_start=None, episode_end=None):
     """
     Extract a motion window centered at a specific frame.
     
     Args:
         data_dict: Dictionary with motion data fields
-        center_idx: Center frame index
+        center_idx: Center frame index (global index in dataset)
         window_size: Total window size (e.g., 60 frames)
         boundary_mode: How to handle boundaries ('pad', 'truncate', 'mirror')
+        episode_start: Start index of the episode (if None, assumes single episode starting at 0)
+        episode_end: End index of the episode (if None, uses total_frames)
         
     Returns:
         Dictionary with windowed motion data
     """
     total_frames = data_dict['body_pos'].shape[0]
+    
+    # Set episode boundaries
+    if episode_start is None:
+        episode_start = 0
+    if episode_end is None:
+        episode_end = total_frames
+    
     half_window = window_size // 2
     
-    # Calculate window indices
+    # Calculate window indices (relative to global dataset)
     start_idx = center_idx - half_window
     end_idx = center_idx + half_window
     
-    # Handle boundary cases
+    # Convert to episode-relative indices for boundary checking
+    episode_relative_center = center_idx - episode_start
+    episode_relative_start = start_idx - episode_start
+    episode_relative_end = end_idx - episode_start
+    episode_length = episode_end - episode_start
+    
+    # Handle boundary cases WITHIN the episode
     if boundary_mode == 'pad':
-        # Pad with edge values
-        if start_idx < 0:
-            left_pad = -start_idx
-            start_idx = 0
+        # Pad with edge values of the episode
+        if episode_relative_start < 0:
+            left_pad = -episode_relative_start
+            actual_start = episode_start  # Start of episode
         else:
             left_pad = 0
+            actual_start = start_idx
             
-        if end_idx > total_frames:
-            right_pad = end_idx - total_frames
-            end_idx = total_frames
+        if episode_relative_end > episode_length:
+            right_pad = episode_relative_end - episode_length
+            actual_end = episode_end  # End of episode
         else:
             right_pad = 0
+            actual_end = end_idx
         
-        # Extract window
+        # Extract window from within episode
         window_dict = {}
         for key, value in data_dict.items():
             if isinstance(value, (np.ndarray, torch.Tensor)):
-                window_data = value[start_idx:end_idx]
+                window_data = value[actual_start:actual_end]
                 
-                # Pad if needed
+                # Pad if needed (using episode boundary values)
                 if left_pad > 0:
                     if isinstance(window_data, np.ndarray):
                         pad_value = np.repeat(window_data[0:1], left_pad, axis=0)
@@ -196,30 +213,39 @@ def extract_motion_window(data_dict, center_idx, window_size, boundary_mode='pad
                 window_dict[key] = value
                 
     elif boundary_mode == 'truncate':
-        # Truncate window to available data
-        start_idx = max(0, start_idx)
-        end_idx = min(total_frames, end_idx)
+        # Truncate window to episode boundaries
+        actual_start = max(episode_start, start_idx)
+        actual_end = min(episode_end, end_idx)
         
         window_dict = {}
         for key, value in data_dict.items():
             if isinstance(value, (np.ndarray, torch.Tensor)):
-                window_dict[key] = value[start_idx:end_idx]
+                window_dict[key] = value[actual_start:actual_end]
             else:
                 window_dict[key] = value
                 
     elif boundary_mode == 'mirror':
-        # Mirror padding at boundaries
+        # Mirror padding at episode boundaries
         indices = list(range(start_idx, end_idx))
         
-        # Mirror negative indices
-        indices = [abs(i) if i < 0 else i for i in indices]
-        # Mirror indices beyond total_frames
-        indices = [2 * total_frames - i - 2 if i >= total_frames else i for i in indices]
+        # Mirror indices that fall outside episode boundaries
+        mirrored_indices = []
+        for i in indices:
+            episode_relative_i = i - episode_start
+            if episode_relative_i < 0:
+                # Mirror from start
+                mirrored_indices.append(episode_start + abs(episode_relative_i))
+            elif episode_relative_i >= episode_length:
+                # Mirror from end
+                overflow = episode_relative_i - episode_length + 1
+                mirrored_indices.append(episode_end - 1 - overflow)
+            else:
+                mirrored_indices.append(i)
         
         window_dict = {}
         for key, value in data_dict.items():
             if isinstance(value, (np.ndarray, torch.Tensor)):
-                window_dict[key] = value[indices]
+                window_dict[key] = value[mirrored_indices]
             else:
                 window_dict[key] = value
     else:

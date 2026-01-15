@@ -23,10 +23,10 @@ encoding:
   
   # How to handle boundaries (start/end of sequences)
   # Options: 'pad', 'truncate', 'mirror'
-  boundary_mode: 'pad'
+  boundary_mode: 'truncate'  # NOTE: If using FPS resampling, it will automatically pad as needed
   
   # Batch size for encoding (larger = faster but more memory)
-  batch_size: 2048
+  batch_size: 8192
   
   # Pose representation used by the model
   # Options: 'xyz', 'rot6d', 'posquat', 'posvel'
