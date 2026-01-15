@@ -23,7 +23,7 @@ encoding:
   
   # How to handle boundaries (start/end of sequences)
   # Options: 'pad', 'truncate', 'mirror'
-  boundary_mode: 'truncate'  # NOTE: If using FPS resampling, it will automatically pad as needed
+  boundary_mode: 'pad'  # FIXME: If using FPS resampling, unknown behavior with `truncate`
   
   # Batch size for encoding (larger = faster but more memory)
   batch_size: 8192
