@@ -12,6 +12,12 @@ motionclip:
   
 # Motion encoding configuration
 encoding:
+  # FPS conversion settings
+  # Collected motion is at origin_fps, but MotionCLIP expects target_fps
+  origin_fps: 50  # FPS of collected motion data
+  target_fps: 30  # FPS expected by MotionCLIP model
+  interp_method: 'linear'  # Interpolation method: 'linear', 'nearest', 'cubic'
+  
   # Window size for motion sequence (should match model's num_frames)
   window_size: 60  # frames
   

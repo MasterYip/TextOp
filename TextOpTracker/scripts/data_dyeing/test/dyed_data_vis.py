@@ -219,12 +219,16 @@ class DyedDataVisualizer:
         # Pre-compute all predictions
         print("Pre-computing text predictions...")
         all_predictions = []
-        confidences = []
+        confidences_top1 = []
+        confidences_top2 = []
+        confidences_top3 = []
         for t in tqdm(range(T)):
             latent = torch.from_numpy(motion_latents[t]).float().to(self.device)
             predictions = self.predict_text_from_latent(latent, top_k=3)
             all_predictions.append(predictions)
-            confidences.append(predictions[0][1])  # Top-1 confidence
+            confidences_top1.append(predictions[0][1])  # Top-1 confidence
+            confidences_top2.append(predictions[1][1])  # Top-2 confidence
+            confidences_top3.append(predictions[2][1])  # Top-3 confidence
         
         # Animation update function
         def update(frame):
@@ -270,12 +274,16 @@ class DyedDataVisualizer:
             ax_conf.set_ylim(0, 100)
             ax_conf.set_xlabel('Frame')
             ax_conf.set_ylabel('Confidence (%)')
-            ax_conf.set_title('Top-1 Prediction Confidence')
+            ax_conf.set_title('Top-3 Prediction Confidence')
             ax_conf.grid(True, alpha=0.3)
             
-            # Plot confidence up to current frame
-            ax_conf.plot(range(frame + 1), confidences[:frame + 1], 'b-', linewidth=2)
+            # Plot top-3 confidence curves up to current frame
+            ax_conf.plot(range(frame + 1), confidences_top1[:frame + 1], 'g-', linewidth=2.5, label='Top-1', alpha=0.9)
+            ax_conf.plot(range(frame + 1), confidences_top2[:frame + 1], 'b-', linewidth=2, label='Top-2', alpha=0.7)
+            ax_conf.plot(range(frame + 1), confidences_top3[:frame + 1], 'orange', linewidth=1.5, label='Top-3', alpha=0.6)
             ax_conf.axvline(frame, color='red', linestyle='--', alpha=0.5)
+            if frame == 0:  # Add legend only on first frame
+                ax_conf.legend(loc='upper right', fontsize=9)
             
             return ax_3d, ax_text, ax_conf
         
@@ -540,7 +548,7 @@ def main():
                        help='Format for saved embeddings (default: txt)')
     parser.add_argument('--only-embeddings', action='store_true',
                        help='Only save embeddings, skip visualizations')
-    parser.add_argument('--dim-reduction', type=str, default='umap', choices=['umap', 'tsne'],
+    parser.add_argument('--dim-reduction', type=str, default='tsne', choices=['umap', 'tsne'],
                        help='Dimensionality reduction method for trajectory visualization (default: umap)')
     parser.add_argument('--umap-neighbors', type=int, default=15,
                        help='UMAP n_neighbors parameter (default: 15)')

@@ -28,6 +28,7 @@ from omegaconf import DictConfig, OmegaConf
 from tqdm import tqdm
 import yaml
 import clip
+from scipy import interpolate
 
 # Import MotionCLIP utilities
 from src.utils.get_model_and_data import get_motion_clip
@@ -92,6 +93,15 @@ class MotionDataDyer:
             self.window_size = self.model_cfg.model.num_frames
         else:
             self.window_size = cfg.encoding.window_size
+        
+        # Store FPS conversion parameters
+        self.origin_fps = cfg.encoding.get('origin_fps', 30)
+        self.target_fps = cfg.encoding.get('target_fps', 30)
+        self.interp_method = cfg.encoding.get('interp_method', 'linear')
+        
+        if self.origin_fps != self.target_fps:
+            print(f"\n  FPS Conversion enabled: {self.origin_fps} Hz → {self.target_fps} Hz")
+            print(f"  Interpolation method: {self.interp_method}")
         
         # Load vocabulary if using text-aligned encoding
         self.text_features_norm = None
@@ -237,6 +247,61 @@ class MotionDataDyer:
         
         return all_latents
     
+    def _resample_motion_window(self, motion_data):
+        """
+        Resample motion window from origin_fps to target_fps.
+        
+        Args:
+            motion_data: Dict with 'body_pos', 'body_rot', etc. [T, ...]
+        
+        Returns:
+            resampled_data: Dict with resampled motion data [T_new, ...]
+        """
+        if self.origin_fps == self.target_fps:
+            return motion_data  # No resampling needed
+        
+        # Calculate new time points
+        T_orig = motion_data['body_pos'].shape[0]
+        duration = (T_orig - 1) / self.origin_fps  # Duration in seconds
+        T_new = int(duration * self.target_fps) + 1
+        
+        # Original and target time points
+        t_orig = np.linspace(0, duration, T_orig)
+        t_new = np.linspace(0, duration, T_new)
+        
+        # Resample each field
+        resampled_data = {}
+        
+        for key, data in motion_data.items():
+            if data is None:
+                resampled_data[key] = None
+                continue
+            
+            # Handle different interpolation methods
+            if self.interp_method == 'nearest':
+                kind = 'nearest'
+            elif self.interp_method == 'cubic':
+                kind = 'cubic'
+            else:  # linear
+                kind = 'linear'
+            
+            # For multi-dimensional data, interpolate along first axis
+            original_shape = data.shape
+            data_flat = data.reshape(T_orig, -1)  # [T, features]
+            
+            # Create interpolator
+            f = interpolate.interp1d(t_orig, data_flat, axis=0, kind=kind, 
+                                    fill_value='extrapolate')
+            
+            # Resample
+            resampled_flat = f(t_new)
+            
+            # Reshape back
+            new_shape = (T_new,) + original_shape[1:]
+            resampled_data[key] = resampled_flat.reshape(new_shape)
+        
+        return resampled_data
+    
     def _align_to_text(self, motion_latents):
         """
         Align motion latents to text embedding space using vocabulary-weighted averaging.
@@ -279,13 +344,25 @@ class MotionDataDyer:
         if 'body_ang_vel' in self.buffer.data:
             data_dict['body_ang_vel'] = self.buffer['body_ang_vel'][:]
         
-        # Extract window
+        # Extract window at original FPS
+        # Need to adjust window size for original FPS
+        if self.origin_fps != self.target_fps:
+            # Calculate window size at original FPS to get target duration
+            target_duration = (self.window_size - 1) / self.target_fps  # Duration in seconds
+            origin_window_size = int(target_duration * self.origin_fps) + 1
+        else:
+            origin_window_size = self.window_size
+        
         window_data = extract_motion_window(
             data_dict,
             center_idx,
-            self.window_size,
+            origin_window_size,
             self.cfg.encoding.boundary_mode
         )
+        
+        # Resample to target FPS if needed
+        if self.origin_fps != self.target_fps:
+            window_data = self._resample_motion_window(window_data)
         
         return window_data
     
