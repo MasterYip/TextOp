@@ -87,3 +87,5 @@ class G1DiffusionEnvCfg(TrackingEnvCfg):
             ee_body_pos=None,
             motion_end=None,
         )
+
+        # self.scene.robot.spawn.fix_base = True
