@@ -251,23 +251,31 @@ class MotionDataDyer:
         """
         Resample motion window from origin_fps to target_fps.
         
+        Always produces exactly self.window_size frames at target_fps.
+        
         Args:
-            motion_data: Dict with 'body_pos', 'body_rot', etc. [T, ...]
+            motion_data: Dict with 'body_pos', 'body_rot', etc. [T_orig, ...]
         
         Returns:
-            resampled_data: Dict with resampled motion data [T_new, ...]
+            resampled_data: Dict with resampled motion data [window_size, ...]
         """
         if self.origin_fps == self.target_fps:
             return motion_data  # No resampling needed
         
-        # Calculate new time points
+        # Get original number of frames
         T_orig = motion_data['body_pos'].shape[0]
-        duration = (T_orig - 1) / self.origin_fps  # Duration in seconds
-        T_new = int(duration * self.target_fps) + 1
         
-        # Original and target time points
-        t_orig = np.linspace(0, duration, T_orig)
-        t_new = np.linspace(0, duration, T_new)
+        # Target is exactly self.window_size frames
+        T_new = self.window_size
+        
+        # Create time arrays
+        # Original: frames at origin_fps
+        t_orig = np.arange(T_orig) / self.origin_fps
+        
+        # Target: exactly window_size frames at target_fps, centered
+        # This ensures we sample {..., t-1/target_fps, t, t+1/target_fps, ...}
+        duration_target = (T_new - 1) / self.target_fps
+        t_new = np.linspace(0, duration_target, T_new)
         
         # Resample each field
         resampled_data = {}
@@ -293,7 +301,7 @@ class MotionDataDyer:
             f = interpolate.interp1d(t_orig, data_flat, axis=0, kind=kind, 
                                     fill_value='extrapolate')
             
-            # Resample
+            # Resample to exactly window_size frames
             resampled_flat = f(t_new)
             
             # Reshape back
