@@ -247,6 +247,9 @@ class MotionDataDyer:
                 if self.text_features_norm is not None:
                     latent_features = self._align_to_text(latent_features)
                 
+                # IMPORTANT: Norm Normalization
+                latent_features = latent_features / latent_features.norm(dim=-1, keepdim=True)
+
                 # Store latents
                 all_latents[batch_start:batch_end] = latent_features.cpu().numpy()
                 
