@@ -45,6 +45,7 @@ encoding:
   # When enabled, motion embeddings are aligned to text embedding space
   # by computing vocabulary-weighted averages of CLIP text embeddings
   use_text_alignment: false  # Set to true to enable text-aligned embeddings
+  text_alignment_temperature: 0.1  # Temperature for text alignment softmax (lower = sharper, higher = smoother)
   vocabulary_path: "text_vocab.yaml"  # Path to vocabulary YAML file
 
 # Output configuration

@@ -105,6 +105,7 @@ class MotionDataDyer:
         
         # Load vocabulary if using text-aligned encoding
         self.text_features_norm = None
+        self.text_alignment_temperature = cfg.encoding.get('text_alignment_temperature', 1.0)
         if cfg.encoding.get('use_text_alignment', False):
             self._load_vocabulary()
     
@@ -138,7 +139,7 @@ class MotionDataDyer:
             self.text_features_norm = text_features / text_features.norm(dim=-1, keepdim=True)
         
         print(f"  Text features shape: {self.text_features_norm.shape}")
-        print(f"  Text alignment enabled!")
+        print(f"  Text alignment enabled with temperature: {self.text_alignment_temperature}")
     
     def load_dataset(self):
         """Load input zarr dataset."""
@@ -346,8 +347,11 @@ class MotionDataDyer:
         motion_latents_norm = motion_latents / motion_latents.norm(dim=-1, keepdim=True)
         
         # Compute similarity with all text descriptions [B, num_texts]
-        # Using same formula as dyed_data_vis.py: (100.0 * motion @ text.T).softmax()
-        similarity = (100.0 * motion_latents_norm @ self.text_features_norm.t()).softmax(dim=-1)
+        # Using same formula as dyed_data_vis.py, but with temperature control
+        # Lower temperature -> sharper distribution (more focused on top matches)
+        # Higher temperature -> smoother distribution (more uniform weighting)
+        logits = motion_latents_norm @ self.text_features_norm.t()
+        similarity = (logits / self.text_alignment_temperature).softmax(dim=-1)
         
         # Compute weighted average of text embeddings
         # text_aligned = sum(similarity[i] * text_embedding[i])
