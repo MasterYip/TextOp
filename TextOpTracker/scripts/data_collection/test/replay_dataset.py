@@ -8,6 +8,9 @@
     # Usage - Replay specific episodes
     python replay_dataset.py --zarr_path ../output/motion.zarr --episode_ids 0 5 10 15
     
+    # Usage - Replay episode ranges
+    python replay_dataset.py --zarr_path ../output/motion.zarr --episode_ranges "0-5,10-15,20"
+    
     # Usage - Replay all episodes (up to max_envs limit)
     python replay_dataset.py --zarr_path ../output/motion.zarr
 """
@@ -28,6 +31,7 @@ parser = argparse.ArgumentParser(description="Replay collected dataset episodes 
 parser.add_argument("--zarr_path", type=str, required=True, help="Path to zarr dataset file")
 parser.add_argument("--num_episodes", type=int, default=None, help="Number of episodes to replay (from start)")
 parser.add_argument("--episode_ids", type=int, nargs='+', default=None, help="Specific episode IDs to replay")
+parser.add_argument("--episode_ranges", type=str, default=None, help="Episode ranges to replay (e.g., '0-5,10-15,20')")
 parser.add_argument("--max_envs", type=int, default=500, help="Maximum number of environments to create")
 parser.add_argument("--slow_motion", type=float, default=1.0, help="Slow motion factor (1.0 = normal speed, 0.5 = half speed)")
 
@@ -356,6 +360,40 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene, buf
     keyboard_ctrl.stop()
 
 
+def parse_episode_ranges(ranges_str):
+    """Parse episode ranges string into list of episode IDs.
+    
+    Args:
+        ranges_str: String like "0-5,10-15,20" or "0-5, 10-15, 20"
+    
+    Returns:
+        List of episode IDs
+    
+    Examples:
+        "0-5" -> [0, 1, 2, 3, 4, 5]
+        "0-5,10-15,20" -> [0, 1, 2, 3, 4, 5, 10, 11, 12, 13, 14, 15, 20]
+    """
+    episode_ids = []
+    
+    # Split by comma and process each range
+    for part in ranges_str.split(','):
+        part = part.strip()
+        
+        if '-' in part:
+            # Range like "0-5"
+            start, end = part.split('-')
+            start, end = int(start.strip()), int(end.strip())
+            episode_ids.extend(range(start, end + 1))
+        else:
+            # Single episode ID
+            episode_ids.append(int(part))
+    
+    # Remove duplicates and sort
+    episode_ids = sorted(set(episode_ids))
+    
+    return episode_ids
+
+
 def main():
     # Check if zarr path exists
     zarr_path = args_cli.zarr_path
@@ -389,6 +427,20 @@ def main():
         if invalid_ids:
             print(f"[ERROR] Invalid episode IDs: {invalid_ids}")
             print(f"[ERROR] Valid range: 0 to {total_episodes - 1}")
+            return
+    elif args_cli.episode_ranges is not None:
+        # Parse episode ranges
+        try:
+            episode_ids = parse_episode_ranges(args_cli.episode_ranges)
+            # Validate episode IDs
+            invalid_ids = [ep_id for ep_id in episode_ids if ep_id >= total_episodes or ep_id < 0]
+            if invalid_ids:
+                print(f"[ERROR] Invalid episode IDs in ranges: {invalid_ids}")
+                print(f"[ERROR] Valid range: 0 to {total_episodes - 1}")
+                return
+        except Exception as e:
+            print(f"[ERROR] Failed to parse episode ranges '{args_cli.episode_ranges}': {e}")
+            print("[ERROR] Expected format: '0-5,10-15,20' or '0-5, 10-15, 20'")
             return
     elif args_cli.num_episodes is not None:
         # Use first N episodes
