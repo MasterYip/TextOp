@@ -34,7 +34,8 @@ motion:
 collection:
   # Collection mode:
   #   - standard: Random sampling with quality filters (default)
-  #   - deterministic: M motions × N samples = M*N episodes for full coverage
+  #   - deterministic: M motions × N samples = M*N episodes for full coverage (parallel)
+  #   - deterministic_blocking: M motions × N samples collected sequentially (motion 0: eps 0-49, motion 1: eps 50-99, ...)
   mode: "deterministic"
   
   # Standard mode settings (random sampling)
@@ -47,6 +48,13 @@ collection:
   #   - Each motion sampled exactly N times from start to finish
   #   - Failed episodes reassigned, not counted
   #   - No random start position
+  #
+  # In deterministic_blocking mode:
+  #   - Same as deterministic but motions processed sequentially
+  #   - Motion 0: episodes 0 to (N-1)
+  #   - Motion 1: episodes N to (2N-1)
+  #   - Motion M-1: episodes (M-1)*N to M*N-1
+  #   - Only one motion active at a time
 
   min_episode_length: 100  # Minimum episode length for quality filter
   min_mean_reward: null  # Optional: minimum mean reward per episode

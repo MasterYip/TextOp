@@ -1,13 +1,19 @@
 
 ## BUG
 
-- 20260106 DataCollection Episode is not continuous
+- [x] 20260106 DataCollection Episode is not continuous
 
 ## TODO
 
 - 20260106 Double Check DataDyeing Script
 
 ## Prompt
+
+
+### 20260128 deterministic_blocking data collection
+
+I hope you add a new mode deterministic_blocking in #file:data_collection.yaml #sym:MotionCollectionCommandCfg to collect motion by motion, i.e., all samples are collected in order, the first motion samples are eps 0-49, second are 50-99...
+This requires that for each time the motion command can only be one motion,. after all 50(samples_per_motion) samples collected, switch to next motion file.
 
 ### 20260108 data_collection improvement
 

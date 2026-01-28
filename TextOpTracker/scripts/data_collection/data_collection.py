@@ -174,11 +174,19 @@ def collect_data(cfg: DictConfig):
     # === Handle collection mode ===
     collection_mode = cfg.collection.get("mode", "standard")
     
-    if collection_mode == "deterministic":
+    if collection_mode in ["deterministic", "deterministic_blocking"]:
         # Deterministic M*N sampling mode
         samples_per_motion = cfg.collection.samples_per_motion
-        print(f"[INFO] Using DETERMINISTIC collection mode")
+        mode_display = "DETERMINISTIC" if collection_mode == "deterministic" else "DETERMINISTIC BLOCKING"
+        print(f"[INFO] Using {mode_display} collection mode")
         print(f"[INFO] {len(motion_files)} motions × {samples_per_motion} samples = {len(motion_files) * samples_per_motion} total episodes")
+        
+        if collection_mode == "deterministic_blocking":
+            print(f"[INFO] Blocking mode: motions processed sequentially")
+            for i, mf in enumerate(motion_files):
+                start_ep = i * samples_per_motion
+                end_ep = (i + 1) * samples_per_motion - 1
+                print(f"[INFO]   Motion {i} ({Path(mf).parent.name}): episodes {start_ep}-{end_ep}")
         
         # Need to use collection command term instead of standard motion command
         from textop_tracker.tasks.tracking.mdp.commands_collection import MotionCollectionCommandCfg
@@ -190,6 +198,7 @@ def collect_data(cfg: DictConfig):
             body_names=env_cfg.commands.motion.body_names,
             motion_files=motion_files,
             samples_per_motion=samples_per_motion,
+            collection_mode=collection_mode,  # Pass the mode to the command
             default_height=getattr(env_cfg.commands.motion, "default_height", 2.0),
             pose_range=getattr(env_cfg.commands.motion, "pose_range", {}),
             velocity_range=getattr(env_cfg.commands.motion, "velocity_range", {}),

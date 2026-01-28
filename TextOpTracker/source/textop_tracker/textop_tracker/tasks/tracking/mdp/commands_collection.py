@@ -1,11 +1,22 @@
 """
 Deterministic Motion Collection Command for Data Collection
 
-This module implements a deterministic sampling strategy for data collection:
-- M motion files × N samples per motion = M*N total episodes
-- Each environment is assigned to a specific (motion_id, sample_id) pair
-- No resampling on failure - failed episodes don't count as completed
-- When all assignments complete, idle envs reset to default pose
+This module implements deterministic sampling strategies for data collection:
+
+1. deterministic mode (default):
+   - M motion files × N samples per motion = M*N total episodes
+   - Each environment is assigned to a specific (motion_id, sample_id) pair
+   - Motions are processed in parallel across environments
+   - No resampling on failure - failed episodes don't count as completed
+   - When all assignments complete, idle envs reset to default pose
+
+2. deterministic_blocking mode:
+   - Same M×N sampling but motions processed sequentially
+   - Only one motion is active at a time
+   - All N samples for motion 0 collected first (episodes 0 to N-1)
+   - Then all N samples for motion 1 (episodes N to 2N-1)
+   - And so on until motion M-1 (episodes (M-1)*N to M*N-1)
+   - Ensures sequential episode numbering by motion
 
 This ensures complete coverage of the action distribution for all motions.
 """
@@ -173,6 +184,7 @@ class MotionCollectionCommand(CommandTerm):
         self.num_motions = len(self.cfg.motion_files)
         self.samples_per_motion = self.cfg.samples_per_motion
         self.total_tasks = self.num_motions * self.samples_per_motion
+        self.collection_mode = self.cfg.collection_mode
         
         # Track task status: [M, N]
         # 0 = not started, -1 = assigned (in progress), 1 = completed
@@ -187,6 +199,11 @@ class MotionCollectionCommand(CommandTerm):
         # Track if env is idle (all tasks done)
         self.env_is_idle = torch.zeros(self.num_envs, dtype=torch.long,
                                        device=self.device)
+        
+        # === Blocking mode specific ===
+        # In blocking mode, only one motion is active at a time
+        self.current_motion_idx = 0  # Current active motion in blocking mode
+        self.blocking_mode_complete = False  # Flag when all motions done
         
         # Motion and time tracking (same as original)
         self.time_steps = torch.zeros(self.num_envs,
@@ -234,6 +251,8 @@ class MotionCollectionCommand(CommandTerm):
                                                   device=self.device)
         self.metrics["collection_progress"] = torch.zeros(self.num_envs,
                                                          device=self.device)
+        self.metrics["current_motion_idx"] = torch.zeros(self.num_envs,
+                                                        device=self.device)
 
         # For motion end termination
         self.motion_end_reset_env_idx = torch.zeros(self.num_envs, dtype=torch.bool, device=self.device)
@@ -328,20 +347,58 @@ class MotionCollectionCommand(CommandTerm):
                     static_env_ids, :, :, :] -= anchor_vel[:, :, None, :]
 
     def _get_next_task(self) -> Optional[tuple[int, int]]:
-        """Get next unassigned task and mark it as assigned."""
-        # Find tasks that are not started (status == 0)
-        unassigned_mask = self.task_status == 0
-        if not unassigned_mask.any():
-            return None
+        """Get next unassigned task and mark it as assigned.
         
-        # Find first unassigned task
-        unassigned_indices = torch.nonzero(unassigned_mask, as_tuple=False)
-        if len(unassigned_indices) == 0:
-            return None
-        
-        motion_idx, sample_idx = unassigned_indices[0].tolist()
-        
-        # Mark as assigned (-1) to prevent other envs from taking it
+        In blocking mode, only returns tasks from the current active motion.
+        When all samples for current motion are done, advances to next motion.
+        """
+        if self.collection_mode == "deterministic_blocking":
+            # Check if current motion is complete
+            if self.current_motion_idx >= self.num_motions:
+                return None  # All motions done
+            
+            # Find unassigned tasks for current motion only
+            current_motion_mask = self.task_status[self.current_motion_idx] == 0
+            if not current_motion_mask.any():
+                # Current motion complete, advance to next
+                completed_samples = (self.task_status[self.current_motion_idx] == 1).sum().item()
+                print(f"[MotionCollection] Motion {self.current_motion_idx} complete: {completed_samples}/{self.samples_per_motion} samples collected")
+                
+                self.current_motion_idx += 1
+                if self.current_motion_idx >= self.num_motions:
+                    self.blocking_mode_complete = True
+                    print(f"[MotionCollection] All {self.num_motions} motions complete!")
+                    return None
+                
+                # Log new motion
+                print(f"[MotionCollection] Starting motion {self.current_motion_idx}/{self.num_motions}")
+                
+                # Recursively get task from next motion
+                return self._get_next_task()
+            
+            # Get first unassigned sample from current motion
+            unassigned_samples = torch.nonzero(current_motion_mask, as_tuple=False)
+            sample_idx = unassigned_samples[0].item()
+            
+            # Mark as assigned
+            self.task_status[self.current_motion_idx, sample_idx] = -1
+            
+            return (self.current_motion_idx, sample_idx)
+        else:
+            # Original deterministic mode: any unassigned task
+            # Find tasks that are not started (status == 0)
+            unassigned_mask = self.task_status == 0
+            if not unassigned_mask.any():
+                return None
+            
+            # Find first unassigned task
+            unassigned_indices = torch.nonzero(unassigned_mask, as_tuple=False)
+            if len(unassigned_indices) == 0:
+                return None
+            
+            motion_idx, sample_idx = unassigned_indices[0].tolist()
+            
+            # Mark as assigned (-1) to prevent other envs from taking it
         self.task_status[motion_idx, sample_idx] = -1
         
         return (motion_idx, sample_idx)
@@ -639,6 +696,10 @@ class MotionCollectionCommand(CommandTerm):
         self.metrics["tasks_completed"][:] = completed_count
         self.metrics["tasks_total"][:] = self.total_tasks
         self.metrics["collection_progress"][:] = completed_count / max(self.total_tasks, 1)
+        
+        # Blocking mode: track current motion
+        if self.collection_mode == "deterministic_blocking":
+            self.metrics["current_motion_idx"][:] = self.current_motion_idx
 
     def _resample_command(self, env_ids: torch.Tensor):
         """
@@ -839,6 +900,7 @@ class MotionCollectionCommandCfg(CommandTermCfg):
     # Collection-specific
     samples_per_motion: int = 1  # N samples per motion
     default_height: float = 0.98  # Default height for idle pose
+    collection_mode: str = "deterministic"  # Options: "deterministic", "deterministic_blocking"
 
     # Randomization ranges
     pose_range: dict[str, tuple[float, float]] = {}
