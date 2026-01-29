@@ -391,8 +391,12 @@ class MotionDataDyer:
         # Process each episode
         motion_idx_data = self.buffer['motion_idx'][:]  # [total_frames, 1]
         
+        # Get length mismatch policy
+        mismatch_policy = self.cfg.input.get('length_mismatch_policy', 'drop_all')
+        
         mismatches = []
         valid_episodes = []  # Track episodes that match
+        clipped_episodes = []  # Track episodes that were clipped
         
         for ep_idx in tqdm(range(self.buffer.n_episodes), desc="Attaching latents"):
             ep_start = episode_starts[ep_idx]
@@ -404,7 +408,7 @@ class MotionDataDyer:
             
             if motion_idx not in motion_latents_cache:
                 print(f"  [WARNING] Episode {ep_idx} has motion_idx={motion_idx} not in cache. Skipping.")
-                mismatches.append((ep_idx, motion_idx, ep_length, -1))
+                mismatches.append((ep_idx, motion_idx, ep_length, -1, 'not_in_cache'))
                 continue
             
             # Get cached latents for this motion
@@ -413,28 +417,64 @@ class MotionDataDyer:
             
             # Check length compatibility
             if ep_length != motion_length:
-                print(f"  [WARNING] Episode {ep_idx} length {ep_length} != motion {motion_idx} length {motion_length}. Skipping.")
-                mismatches.append((ep_idx, motion_idx, ep_length, motion_length))
-                # Skip this episode - it will be removed when saving
-                continue
+                if mismatch_policy == "clip_or_drop":
+                    if ep_length < motion_length:
+                        # Sample shorter than motion: clip motion to match sample
+                        all_latents[ep_start:ep_end] = motion_latents[:ep_length]
+                        valid_episodes.append(ep_idx)
+                        clipped_episodes.append((ep_idx, motion_idx, ep_length, motion_length))
+                    else:
+                        # Sample longer than motion: drop episode
+                        print(f"  [WARNING] Episode {ep_idx} length {ep_length} > motion {motion_idx} length {motion_length}. Dropping.")
+                        mismatches.append((ep_idx, motion_idx, ep_length, motion_length, 'too_long'))
+                        continue
+                        
+                elif mismatch_policy == "interpolate":
+                    # Use linear interpolation to align
+                    indices = np.linspace(0, motion_length - 1, ep_length)
+                    resampled_latents = np.zeros((ep_length, latent_dim), dtype=np.float32)
+                    for feat_idx in range(latent_dim):
+                        resampled_latents[:, feat_idx] = np.interp(
+                            indices, np.arange(motion_length), motion_latents[:, feat_idx]
+                        )
+                    all_latents[ep_start:ep_end] = resampled_latents
+                    valid_episodes.append(ep_idx)
+                    
+                else:  # drop_all (default)
+                    print(f"  [WARNING] Episode {ep_idx} length {ep_length} != motion {motion_idx} length {motion_length}. Skipping.")
+                    mismatches.append((ep_idx, motion_idx, ep_length, motion_length, 'mismatch'))
+                    continue
             else:
-                # Direct copy - only for matching episodes
+                # Direct copy - perfect match
                 all_latents[ep_start:ep_end] = motion_latents
                 valid_episodes.append(ep_idx)
         
+        # Print statistics
+        if clipped_episodes:
+            print(f"\n  [INFO] Clipped {len(clipped_episodes)} episodes (sample < motion):")
+            for ep_idx, motion_idx, ep_len, motion_len in clipped_episodes[:10]:
+                print(f"    Episode {ep_idx} (motion {motion_idx}): clipped {motion_len} -> {ep_len} frames")
+            if len(clipped_episodes) > 10:
+                print(f"    ... and {len(clipped_episodes) - 10} more")
+        
         if mismatches:
-            print(f"\n  [INFO] Skipping {len(mismatches)} episodes with length mismatch:")
+            print(f"\n  [INFO] Skipping {len(mismatches)} episodes:")
             print(f"  (These episodes will be removed from the saved dataset)")
-            for ep_idx, motion_idx, ep_len, motion_len in mismatches[:10]:  # Show first 10
-                if motion_len == -1:
+            for ep_idx, motion_idx, ep_len, motion_len, reason in mismatches[:10]:
+                if reason == 'not_in_cache':
                     print(f"    Episode {ep_idx} (motion {motion_idx}): motion not in cache")
+                elif reason == 'too_long':
+                    print(f"    Episode {ep_idx} (motion {motion_idx}): {ep_len} frames > {motion_len} original (too long)")
                 else:
                     print(f"    Episode {ep_idx} (motion {motion_idx}): {ep_len} frames vs {motion_len} original")
             if len(mismatches) > 10:
                 print(f"    ... and {len(mismatches) - 10} more")
         
+        print(f"\n  Policy: '{mismatch_policy}'")
         print(f"  Attached latents for {len(valid_episodes)}/{self.buffer.n_episodes} episodes")
-        print(f"  Removed {len(mismatches)} mismatched episodes")
+        print(f"  - Perfect matches: {len(valid_episodes) - len(clipped_episodes)}")
+        print(f"  - Clipped (sample < motion): {len(clipped_episodes)}")
+        print(f"  - Removed: {len(mismatches)}")
         
         return all_latents, valid_episodes
     

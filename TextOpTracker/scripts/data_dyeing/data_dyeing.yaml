@@ -12,6 +12,13 @@ input:
   motion_pattern: "selected_motions/*"  # Pattern to match motion files (when dyeing_from_origin_motion=true)
   motion_base_path: "../../artifacts"  # Base path for motion files
   
+  # Length mismatch handling policy (when dyeing_from_origin_motion=true)
+  # Options:
+  #   - "clip_or_drop": If sample < motion, clip motion to sample length; if sample > motion, drop episode
+  #   - "drop_all": Drop any episode with length mismatch (safest, current default)
+  #   - "interpolate": Use linear interpolation to align all mismatches (may lose quality)
+  length_mismatch_policy: "clip_or_drop"
+  
 # MotionCLIP model configuration
 motionclip:
   checkpoint_path: "../../../MotionCLIP/exps/g1-model-xyz/checkpoint_0100.pth.tar"
