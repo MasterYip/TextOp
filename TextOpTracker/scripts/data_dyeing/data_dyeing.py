@@ -194,7 +194,7 @@ class MotionDataDyer:
         # Find motion files using glob pattern (same as data_collection.py)
         motion_pattern = self.cfg.input.motion_pattern
         motion_base_path = Path(self.cfg.input.get('motion_base_path', './artifacts'))
-        motion_files = sorted(glob.glob(str(motion_base_path / motion_pattern / "motion.npz")))
+        motion_files = glob.glob(str(motion_base_path / motion_pattern / "motion.npz"))
         
         if not motion_files:
             raise FileNotFoundError(f"No motion files found: {motion_base_path / motion_pattern / 'motion.npz'}")
@@ -392,6 +392,8 @@ class MotionDataDyer:
         motion_idx_data = self.buffer['motion_idx'][:]  # [total_frames, 1]
         
         mismatches = []
+        valid_episodes = []  # Track episodes that match
+        
         for ep_idx in tqdm(range(self.buffer.n_episodes), desc="Attaching latents"):
             ep_start = episode_starts[ep_idx]
             ep_end = episode_ends[ep_idx]
@@ -402,6 +404,7 @@ class MotionDataDyer:
             
             if motion_idx not in motion_latents_cache:
                 print(f"  [WARNING] Episode {ep_idx} has motion_idx={motion_idx} not in cache. Skipping.")
+                mismatches.append((ep_idx, motion_idx, ep_length, -1))
                 continue
             
             # Get cached latents for this motion
@@ -410,31 +413,30 @@ class MotionDataDyer:
             
             # Check length compatibility
             if ep_length != motion_length:
+                print(f"  [WARNING] Episode {ep_idx} length {ep_length} != motion {motion_idx} length {motion_length}. Skipping.")
                 mismatches.append((ep_idx, motion_idx, ep_length, motion_length))
-                # Resample motion latents to match episode length
-                # Simple linear interpolation
-                indices = np.linspace(0, motion_length - 1, ep_length)
-                resampled_latents = np.zeros((ep_length, latent_dim), dtype=np.float32)
-                for feat_idx in range(latent_dim):
-                    resampled_latents[:, feat_idx] = np.interp(
-                        indices, np.arange(motion_length), motion_latents[:, feat_idx]
-                    )
-                all_latents[ep_start:ep_end] = resampled_latents
+                # Skip this episode - it will be removed when saving
+                continue
             else:
-                # Direct copy
+                # Direct copy - only for matching episodes
                 all_latents[ep_start:ep_end] = motion_latents
+                valid_episodes.append(ep_idx)
         
         if mismatches:
-            print(f"\n  [INFO] Found {len(mismatches)} episodes with length mismatch:")
-            print(f"  (Using linear interpolation to align latents)")
+            print(f"\n  [INFO] Skipping {len(mismatches)} episodes with length mismatch:")
+            print(f"  (These episodes will be removed from the saved dataset)")
             for ep_idx, motion_idx, ep_len, motion_len in mismatches[:10]:  # Show first 10
-                print(f"    Episode {ep_idx} (motion {motion_idx}): {ep_len} frames vs {motion_len} original")
+                if motion_len == -1:
+                    print(f"    Episode {ep_idx} (motion {motion_idx}): motion not in cache")
+                else:
+                    print(f"    Episode {ep_idx} (motion {motion_idx}): {ep_len} frames vs {motion_len} original")
             if len(mismatches) > 10:
                 print(f"    ... and {len(mismatches) - 10} more")
         
-        print(f"  Attached latents for {self.buffer.n_episodes} episodes")
+        print(f"  Attached latents for {len(valid_episodes)}/{self.buffer.n_episodes} episodes")
+        print(f"  Removed {len(mismatches)} mismatched episodes")
         
-        return all_latents
+        return all_latents, valid_episodes
     
     def encode_motions(self):
         """Encode all motions to CLIP latent space."""
@@ -657,10 +659,34 @@ class MotionDataDyer:
         
         return window_data
     
-    def save_dataset(self, latents):
-        """Save dataset with added latent vectors."""
+    def save_dataset(self, latents, valid_episodes=None):
+        """Save dataset with added latent vectors.
+        
+        Args:
+            latents: Latent vectors for all frames
+            valid_episodes: Optional list of valid episode indices to keep
+        """
         print(f"\n[4/4] Saving dataset with latent vectors...")
         print(f"  Output path: {self.cfg.output.zarr_path}")
+        
+        # Filter buffer if valid_episodes is provided
+        if valid_episodes is not None:
+            print(f"  Filtering dataset to keep only {len(valid_episodes)}/{self.buffer.n_episodes} valid episodes...")
+            
+            # Create filtered buffer with only valid episodes
+            filtered_buffer = ReplayBuffer.create_empty_zarr()
+            
+            for ep_idx in tqdm(valid_episodes, desc="Copying valid episodes"):
+                # Get episode slice
+                episode = self.buffer.get_episode(ep_idx)
+                # Add to filtered buffer
+                filtered_buffer.add_episode(episode)
+            
+            # Replace buffer with filtered version
+            self.buffer = filtered_buffer
+            self.total_frames = self.buffer.n_steps
+            
+            print(f"  Filtered dataset: {self.total_frames} frames, {self.buffer.n_episodes} episodes")
         
         # Create output directory
         output_dir = os.path.dirname(self.cfg.output.zarr_path)
@@ -762,7 +788,10 @@ def main(cfg: DictConfig):
         cached_latents = dyer.load_origin_motions()
         
         # Attach cached latents to dataset using motion_idx
-        latents = dyer.attach_cached_latents(cached_latents)
+        latents, valid_episodes = dyer.attach_cached_latents(cached_latents)
+        
+        # Save with filtering
+        dyer.save_dataset(latents, valid_episodes=valid_episodes)
         
     else:
         print("\n" + "="*80)
@@ -776,8 +805,8 @@ def main(cfg: DictConfig):
         # Encode motions from collected samples
         latents = dyer.encode_motions()
     
-    # Save dataset
-    dyer.save_dataset(latents)
+        # Save dataset
+        dyer.save_dataset(latents)
 
 
 if __name__ == '__main__':
