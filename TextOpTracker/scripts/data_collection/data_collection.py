@@ -454,6 +454,29 @@ def collect_data(cfg: DictConfig):
     
     print(f"[INFO] Saving dataset to {output_path}")
     
+    # Sort episodes by motion_idx if requested (ensures motion1: eps0-N, motion2: eps(N+1)-2N, etc.)
+    if cfg.output.get('sort_by_motion_idx', False):
+        print(f"[INFO] Sorting {buffer.n_episodes} episodes by motion_idx...")
+        
+        # Extract motion_idx for each episode and create sorting index
+        episode_motion_indices = []
+        for ep_idx in range(buffer.n_episodes):
+            episode = buffer.get_episode(ep_idx, copy=False)
+            motion_idx = int(episode['motion_idx'][0])  # Get scalar value
+            episode_motion_indices.append((ep_idx, motion_idx))
+        
+        # Sort by motion_idx (stable sort preserves order within same motion)
+        sorted_episodes = sorted(episode_motion_indices, key=lambda x: x[1])
+        
+        # Create new buffer with sorted episodes
+        sorted_buffer = ReplayBuffer.create_empty_numpy()
+        for orig_idx, motion_idx in tqdm(sorted_episodes, desc="Sorting episodes"):
+            episode_data = buffer.get_episode(orig_idx, copy=True)
+            sorted_buffer.add_episode(episode_data)
+        
+        buffer = sorted_buffer
+        print(f"[INFO] Episodes sorted by motion_idx (motion files in order)")
+    
     # Set chunk length
     chunk_length = cfg.output.chunk_length if cfg.output.chunk_length > 0 else None
     

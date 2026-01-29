@@ -10,6 +10,7 @@ output:
   zarr_name: "motion.zarr"
   compressor: "disk"  # Use zstd compression for disk storage
   chunk_length: -1  # -1 for auto, or specify chunk size
+  sort_by_motion_idx: true  # Sort episodes by motion_idx before saving (ensures motion1: eps0-N, motion2: eps(N+1)-2N, etc.)
 
 # Task and environment configuration
 task:
