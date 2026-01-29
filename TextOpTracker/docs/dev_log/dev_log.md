@@ -9,6 +9,15 @@
 
 ## Prompt
 
+### 20260129 motion dyeing from original files
+
+I hope to add an option `dyeing_from_origin_motion` in #file:data_dyeing.yaml . If enabled, it will loads motion files from selected motions like #file:data_collection.py .  You just dye original motions and cache the latent, then attach to the recorded samples according to motion_idx.
+
+Note:
+1. check the motion len & sample traj len
+2. for how to load motion files (npz) see #file:replay_npz_multi.py .
+3. If the motion files need convert, update #file:motion_converter.py  
+
 ### 20260129 data_collection motion id
 
 for now the `deterministic` mode in #file:data_collection.py has a problem: the collected motions are not in order (motions are not arranged like motion1:eps0-49, motion2:eps50-99, etc), hence you don't know what the motion is the sample collected from.

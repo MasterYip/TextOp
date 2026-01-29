@@ -275,3 +275,39 @@ def create_motion_batches(total_frames, window_size, batch_size, boundary_mode='
         batches.append((batch_start, batch_end, center_indices))
     
     return batches
+
+
+def load_motion_npz(motion_file, device='cpu'):
+    """
+    Load motion from npz file (IsaacLab format).
+    
+    Args:
+        motion_file: Path to motion.npz file
+        device: Torch device
+        
+    Returns:
+        Dictionary with motion data in IsaacLab format:
+            - body_pos: [T, 30, 3]
+            - body_rot: [T, 30, 4] (quaternions)
+            - body_lin_vel: [T, 30, 3]
+            - body_ang_vel: [T, 30, 3]
+            - joint_pos: [T, 29]
+            - joint_vel: [T, 29]
+            - fps: scalar
+            - motion_length: scalar (number of frames)
+    """
+    data = np.load(motion_file)
+    
+    # Extract motion data (matches MultiMotionLoader format)
+    motion_dict = {
+        'joint_pos': torch.from_numpy(data['joint_pos']).float().to(device),  # [T, 29]
+        'joint_vel': torch.from_numpy(data['joint_vel']).float().to(device),  # [T, 29]
+        'body_pos': torch.from_numpy(data['body_pos_w']).float().to(device),  # [T, num_bodies, 3]
+        'body_rot': torch.from_numpy(data['body_quat_w']).float().to(device),  # [T, num_bodies, 4]
+        'body_lin_vel': torch.from_numpy(data['body_lin_vel_w']).float().to(device),  # [T, num_bodies, 3]
+        'body_ang_vel': torch.from_numpy(data['body_ang_vel_w']).float().to(device),  # [T, num_bodies, 3]
+        'fps': float(data['fps']),
+        'motion_length': data['joint_pos'].shape[0],
+    }
+    
+    return motion_dict

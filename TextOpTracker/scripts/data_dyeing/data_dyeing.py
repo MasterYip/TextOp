@@ -13,6 +13,7 @@ Usage:
 import sys
 import os
 from pathlib import Path
+import glob
 
 # Add paths
 ROOT_DIR = Path(__file__).parent.parent.parent.parent
@@ -34,7 +35,7 @@ from scipy import interpolate
 from src.utils.get_model_and_data import get_motion_clip
 
 # Import local utilities
-from motion_converter import G1MotionConverter, extract_motion_window, create_motion_batches
+from motion_converter import G1MotionConverter, extract_motion_window, create_motion_batches, load_motion_npz
 from replay_buffer import ReplayBuffer
 
 
@@ -181,6 +182,259 @@ class MotionDataDyer:
                 raise ValueError(f"Required field '{field}' not found in dataset")
         
         print(f"  Dataset loaded successfully!")
+    
+    def load_origin_motions(self):
+        """
+        Load original motion files (npz) for dyeing.
+        
+        Returns cached latents indexed by motion_idx.
+        """
+        print(f"\n[2/4] Loading and encoding original motions...")
+        
+        # Find motion files using glob pattern (same as data_collection.py)
+        motion_pattern = self.cfg.input.motion_pattern
+        motion_base_path = Path(self.cfg.input.get('motion_base_path', './artifacts'))
+        motion_files = sorted(glob.glob(str(motion_base_path / motion_pattern / "motion.npz")))
+        
+        if not motion_files:
+            raise FileNotFoundError(f"No motion files found: {motion_base_path / motion_pattern / 'motion.npz'}")
+        
+        print(f"  Found {len(motion_files)} motion files")
+        print(f"  Pattern: {motion_pattern}")
+        
+        # Load zarr to get motion_idx field
+        if not os.path.exists(self.cfg.input.zarr_path):
+            raise FileNotFoundError(f"Dataset not found: {self.cfg.input.zarr_path}")
+        
+        self.buffer = ReplayBuffer.copy_from_path(self.cfg.input.zarr_path)
+        self.total_frames = self.buffer.n_steps
+        
+        # Check motion_idx field exists
+        if 'motion_idx' not in self.buffer.data:
+            raise ValueError("Dataset does not contain 'motion_idx' field. Cannot use dyeing_from_origin_motion mode.")
+        
+        print(f"  Dataset: {self.total_frames} frames, {self.buffer.n_episodes} episodes")
+        
+        # Encode each original motion and cache latents
+        latent_dim = self.model_cfg.model.latent_dim
+        motion_latents_cache = {}  # motion_idx -> [T_motion, latent_dim]
+        
+        for motion_idx, motion_file in enumerate(tqdm(motion_files, desc="Encoding motions")):
+            motion_name = Path(motion_file).parent.name
+            
+            # Load motion from npz
+            motion_data = load_motion_npz(motion_file, device=self.device)
+            motion_length = motion_data['motion_length']
+            motion_fps = motion_data['fps']
+            
+            # Encode this motion
+            motion_latents = self._encode_single_motion(motion_data)  # [T_motion, latent_dim]
+            motion_latents_cache[motion_idx] = motion_latents.cpu().numpy()
+            
+            print(f"  [{motion_idx}] {motion_name}: {motion_length} frames @ {motion_fps} fps -> latents {motion_latents.shape}")
+        
+        print(f"  Cached {len(motion_latents_cache)} motion latents")
+        
+        return motion_latents_cache
+    
+    def _encode_single_motion(self, motion_data):
+        """
+        Encode a single motion sequence to latent vectors.
+        
+        Args:
+            motion_data: Dictionary with motion data from load_motion_npz
+        
+        Returns:
+            latents: [T_motion, latent_dim] tensor
+        """
+        motion_length = motion_data['motion_length']
+        latent_dim = self.model_cfg.model.latent_dim
+        latents = torch.zeros(motion_length, latent_dim, device=self.device)
+        
+        # Process in batches
+        batch_size = self.cfg.encoding.batch_size
+        
+        with torch.no_grad():
+            for start_idx in range(0, motion_length, batch_size):
+                end_idx = min(start_idx + batch_size, motion_length)
+                batch_center_indices = list(range(start_idx, end_idx))
+                
+                # Extract windows for each frame in batch
+                batch_windows = []
+                for center_idx in batch_center_indices:
+                    # Extract window centered at this frame
+                    window_data = self._extract_motion_window_from_data(
+                        motion_data, center_idx, motion_length
+                    )
+                    batch_windows.append(window_data)
+                
+                # Stack into batch
+                batch_dict = {
+                    'body_pos': torch.stack([w['body_pos'] for w in batch_windows]),  # [B, T, 30, 3]
+                    'body_rot': torch.stack([w['body_rot'] for w in batch_windows]),  # [B, T, 30, 4]
+                }
+                if 'body_lin_vel' in batch_windows[0]:
+                    batch_dict['body_lin_vel'] = torch.stack([w['body_lin_vel'] for w in batch_windows])
+                if 'body_ang_vel' in batch_windows[0]:
+                    batch_dict['body_ang_vel'] = torch.stack([w['body_ang_vel'] for w in batch_windows])
+                
+                # Convert each sample in batch to MotionCLIP format
+                batch_converted = []
+                for i in range(len(batch_center_indices)):
+                    converted = self.converter.convert(
+                        batch_dict['body_pos'][i],  # [T, 30, 3]
+                        batch_dict['body_rot'][i],  # [T, 30, 4]
+                        batch_dict.get('body_lin_vel', [None]*len(batch_center_indices))[i] if 'body_lin_vel' in batch_dict else None,
+                        batch_dict.get('body_ang_vel', [None]*len(batch_center_indices))[i] if 'body_ang_vel' in batch_dict else None,
+                    )
+                    batch_converted.append(converted)
+                
+                # Stack and encode
+                batch_tensor = torch.stack(batch_converted)  # [B, bodies, features, time]
+                batch_lengths = torch.tensor([self.window_size] * len(batch_center_indices), 
+                                            dtype=torch.long, device=self.device)
+                
+                # Encode with MotionCLIP (same pattern as encode_motions)
+                mask = self.model.lengths_to_mask(batch_lengths)
+                dummy_labels = torch.zeros(len(batch_center_indices), dtype=torch.long, device=self.device)
+                
+                encoded = self.model.encoder({
+                    'x': batch_tensor,
+                    'y': dummy_labels,
+                    'mask': mask
+                })
+                
+                motion_latents_batch = encoded['mu']  # [B, latent_dim]
+                
+                # Apply text alignment if enabled
+                if self.text_features_norm is not None:
+                    motion_latents_batch = self._align_to_text(motion_latents_batch)
+                
+                # IMPORTANT: Norm Normalization
+                motion_latents_batch = motion_latents_batch / motion_latents_batch.norm(dim=-1, keepdim=True)
+                
+                # Store batch results
+                latents[start_idx:end_idx] = motion_latents_batch
+        
+        return latents
+    
+    def _extract_motion_window_from_data(self, motion_data, center_idx, motion_length):
+        """Extract motion window from loaded motion data."""
+        half_window = self.window_size // 2
+        start_idx = center_idx - half_window
+        end_idx = center_idx + half_window
+        
+        # Handle boundaries with padding
+        if start_idx < 0:
+            left_pad = -start_idx
+            actual_start = 0
+        else:
+            left_pad = 0
+            actual_start = start_idx
+        
+        if end_idx > motion_length:
+            right_pad = end_idx - motion_length
+            actual_end = motion_length
+        else:
+            right_pad = 0
+            actual_end = end_idx
+        
+        # Extract window
+        window_dict = {
+            'body_pos': motion_data['body_pos'][actual_start:actual_end],
+            'body_rot': motion_data['body_rot'][actual_start:actual_end],
+        }
+        
+        if 'body_lin_vel' in motion_data:
+            window_dict['body_lin_vel'] = motion_data['body_lin_vel'][actual_start:actual_end]
+        if 'body_ang_vel' in motion_data:
+            window_dict['body_ang_vel'] = motion_data['body_ang_vel'][actual_start:actual_end]
+        
+        # Pad if needed
+        for key, value in window_dict.items():
+            if left_pad > 0:
+                pad_value = value[0:1].repeat(left_pad, *([1] * (value.ndim - 1)))
+                value = torch.cat([pad_value, value], dim=0)
+            if right_pad > 0:
+                pad_value = value[-1:].repeat(right_pad, *([1] * (value.ndim - 1)))
+                value = torch.cat([value, pad_value], dim=0)
+            window_dict[key] = value
+        
+        return window_dict
+    
+    def attach_cached_latents(self, motion_latents_cache):
+        """
+        Attach cached motion latents to dataset samples based on motion_idx.
+        
+        Args:
+            motion_latents_cache: Dict mapping motion_idx -> [T_motion, latent_dim]
+        
+        Returns:
+            all_latents: [total_frames, latent_dim] array
+        """
+        print(f"\n[3/4] Attaching cached latents to dataset samples...")
+        
+        latent_dim = self.model_cfg.model.latent_dim
+        all_latents = np.zeros((self.total_frames, latent_dim), dtype=np.float32)
+        
+        # Get motion_idx for each frame and episode boundaries
+        episode_ends = self.buffer.episode_ends[:]
+        frame_to_episode = np.zeros(self.total_frames, dtype=np.int64)
+        episode_starts = np.zeros(len(episode_ends), dtype=np.int64)
+        
+        for ep_idx in range(len(episode_ends)):
+            start = 0 if ep_idx == 0 else episode_ends[ep_idx - 1]
+            end = episode_ends[ep_idx]
+            episode_starts[ep_idx] = start
+            frame_to_episode[start:end] = ep_idx
+        
+        # Process each episode
+        motion_idx_data = self.buffer['motion_idx'][:]  # [total_frames, 1]
+        
+        mismatches = []
+        for ep_idx in tqdm(range(self.buffer.n_episodes), desc="Attaching latents"):
+            ep_start = episode_starts[ep_idx]
+            ep_end = episode_ends[ep_idx]
+            ep_length = ep_end - ep_start
+            
+            # Get motion_idx for this episode (should be constant)
+            motion_idx = int(motion_idx_data[ep_start])
+            
+            if motion_idx not in motion_latents_cache:
+                print(f"  [WARNING] Episode {ep_idx} has motion_idx={motion_idx} not in cache. Skipping.")
+                continue
+            
+            # Get cached latents for this motion
+            motion_latents = motion_latents_cache[motion_idx]  # [T_motion, latent_dim]
+            motion_length = motion_latents.shape[0]
+            
+            # Check length compatibility
+            if ep_length != motion_length:
+                mismatches.append((ep_idx, motion_idx, ep_length, motion_length))
+                # Resample motion latents to match episode length
+                # Simple linear interpolation
+                indices = np.linspace(0, motion_length - 1, ep_length)
+                resampled_latents = np.zeros((ep_length, latent_dim), dtype=np.float32)
+                for feat_idx in range(latent_dim):
+                    resampled_latents[:, feat_idx] = np.interp(
+                        indices, np.arange(motion_length), motion_latents[:, feat_idx]
+                    )
+                all_latents[ep_start:ep_end] = resampled_latents
+            else:
+                # Direct copy
+                all_latents[ep_start:ep_end] = motion_latents
+        
+        if mismatches:
+            print(f"\n  [INFO] Found {len(mismatches)} episodes with length mismatch:")
+            print(f"  (Using linear interpolation to align latents)")
+            for ep_idx, motion_idx, ep_len, motion_len in mismatches[:10]:  # Show first 10
+                print(f"    Episode {ep_idx} (motion {motion_idx}): {ep_len} frames vs {motion_len} original")
+            if len(mismatches) > 10:
+                print(f"    ... and {len(mismatches) - 10} more")
+        
+        print(f"  Attached latents for {self.buffer.n_episodes} episodes")
+        
+        return all_latents
     
     def encode_motions(self):
         """Encode all motions to CLIP latent space."""
@@ -493,11 +747,34 @@ def main(cfg: DictConfig):
     # Initialize dyer
     dyer = MotionDataDyer(cfg)
     
-    # Load dataset
-    dyer.load_dataset()
-    
-    # Encode motions
-    latents = dyer.encode_motions()
+    # Check if dyeing from origin motions
+    if cfg.input.get('dyeing_from_origin_motion', False):
+        print("\n" + "="*80)
+        print("Using ORIGIN MOTION DYEING mode")
+        print("="*80)
+        print(f"Loading original motion files from: {cfg.input.motion_base_path}")
+        print(f"Pattern: {cfg.input.motion_pattern}")
+        
+        # Load dataset (needed for motion_idx and structure)
+        dyer.load_dataset()
+        
+        # Load and encode original motions
+        cached_latents = dyer.load_origin_motions()
+        
+        # Attach cached latents to dataset using motion_idx
+        latents = dyer.attach_cached_latents(cached_latents)
+        
+    else:
+        print("\n" + "="*80)
+        print("Using STANDARD DYEING mode")
+        print("="*80)
+        print(f"Loading collected dataset from: {cfg.input.zarr_path}")
+        
+        # Load dataset
+        dyer.load_dataset()
+        
+        # Encode motions from collected samples
+        latents = dyer.encode_motions()
     
     # Save dataset
     dyer.save_dataset(latents)

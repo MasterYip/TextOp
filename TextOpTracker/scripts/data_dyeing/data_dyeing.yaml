@@ -5,6 +5,13 @@
 input:
   zarr_path: "../../outputs/collected_data/motion_dataset.zarr"  # Path to collected zarr dataset
   
+  # Option to dye from original motion files instead of collected samples
+  # More efficient for deterministic collection: encode each unique motion once, 
+  # then attach to all samples based on motion_idx
+  dyeing_from_origin_motion: false  # Set to true to use original npz motions
+  motion_pattern: "selected_motions/*"  # Pattern to match motion files (when dyeing_from_origin_motion=true)
+  motion_base_path: "../../artifacts"  # Base path for motion files
+  
 # MotionCLIP model configuration
 motionclip:
   checkpoint_path: "../../../MotionCLIP/exps/g1-model-xyz/checkpoint_0100.pth.tar"
@@ -45,7 +52,7 @@ encoding:
   # When enabled, motion embeddings are aligned to text embedding space
   # by computing vocabulary-weighted averages of CLIP text embeddings
   use_text_alignment: false  # Set to true to enable text-aligned embeddings
-  text_alignment_temperature: 0.1  # Temperature for text alignment softmax (lower = sharper, higher = smoother)
+  text_alignment_temperature: 0.01  # Temperature for text alignment softmax (lower = sharper, higher = smoother)
   vocabulary_path: "text_vocab.yaml"  # Path to vocabulary YAML file
 
 # Output configuration
