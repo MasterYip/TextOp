@@ -264,6 +264,7 @@ def collect_data(cfg: DictConfig):
         "joint_vel": [[] for _ in range(cfg.task.num_envs)],
         "root_pos": [[] for _ in range(cfg.task.num_envs)],
         "root_rot": [[] for _ in range(cfg.task.num_envs)],
+        "motion_idx": [[] for _ in range(cfg.task.num_envs)],  # Track which motion file
     }
     
     # Track episode statistics for quality filtering
@@ -335,6 +336,7 @@ def collect_data(cfg: DictConfig):
                     episode_data["joint_vel"][env_idx].append(robot_state_np["joint_vel"][env_idx])
                     episode_data["root_pos"][env_idx].append(robot_state_np["root_pos"][env_idx])
                     episode_data["root_rot"][env_idx].append(robot_state_np["root_rot"][env_idx])
+                    episode_data["motion_idx"][env_idx].append(robot_state_np["motion_idx"][env_idx])
                 else:
                     # This env just reset, mark as no longer fresh after this iteration
                     env_just_reset[env_idx] = False
@@ -396,6 +398,7 @@ def collect_data(cfg: DictConfig):
                     
                     if keep_episode and len(episode_data["act"][env_idx]) > 0:
                         # Convert lists to numpy arrays (float64 for compatibility)
+
                         ep_data = {
                             "act": np.array(episode_data["act"][env_idx], dtype=np.float64),
                             "body_pos": np.array(episode_data["body_pos"][env_idx], dtype=np.float64),
@@ -406,6 +409,7 @@ def collect_data(cfg: DictConfig):
                             "joint_vel": np.array(episode_data["joint_vel"][env_idx], dtype=np.float64),
                             "root_pos": np.array(episode_data["root_pos"][env_idx], dtype=np.float64),
                             "root_rot": np.array(episode_data["root_rot"][env_idx], dtype=np.float64),
+                            "motion_idx": np.array(episode_data["motion_idx"][env_idx], dtype=np.int64),  # [1] - scalar per episode
                         }
                         
                         # Add episode to buffer
@@ -459,7 +463,7 @@ def collect_data(cfg: DictConfig):
         chunks={'act': None, 'body_pos': None, 'body_rot': None,
                 'body_lin_vel': None, 'body_ang_vel': None,
                 'joint_pos': None, 'joint_vel': None,
-                'root_pos': None, 'root_rot': None} if chunk_length is None else {},
+                'root_pos': None, 'root_rot': None, 'motion_idx': None} if chunk_length is None else {},
         compressors=cfg.output.compressor,
     )
     

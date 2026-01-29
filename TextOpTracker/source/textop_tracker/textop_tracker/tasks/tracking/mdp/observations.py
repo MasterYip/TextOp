@@ -152,7 +152,7 @@ def motion_anchor_ori_b_future(env: ManagerBasedEnv, command_name: str) -> torch
     return mat[..., :2].reshape(mat.shape[0], -1)
 
 
-def extract_robot_state(env: ManagerBasedEnv) -> dict:
+def extract_robot_state(env: ManagerBasedEnv, command_name: str = "motion") -> dict:
     """
     Extract raw robot state data from the environment.
     
@@ -166,6 +166,11 @@ def extract_robot_state(env: ManagerBasedEnv) -> dict:
         - joint_vel: [num_envs, 29]
         - root_pos: [num_envs, 3]
         - root_rot: [num_envs, 4]
+        - motion_idx: [num_envs] (scalar per env, indicates which motion file)
+    
+    Args:
+        env: The environment instance
+        command_name: Name of the motion command term (default: "motion")
     """
     robot = env.scene["robot"]
     
@@ -188,6 +193,14 @@ def extract_robot_state(env: ManagerBasedEnv) -> dict:
     root_pos = body_pos_w[:, 0, :]  # [num_envs, 3]
     root_rot = body_quat_w[:, 0, :]  # [num_envs, 4]
     
+    # Get motion_idx from motion command (for tracking which motion file)
+    try:
+        motion_command = env.command_manager.get_term(command_name)
+        motion_idx = motion_command.motion_idx.clone()  # [num_envs]
+    except (AttributeError, KeyError):
+        # Fallback if command doesn't have motion_idx (e.g., non-collection mode)
+        motion_idx = torch.zeros(env.num_envs, dtype=torch.long, device=robot.device)
+    
     return {
         "body_pos": body_pos_w,  # [num_envs, 30, 3]
         "body_rot": body_quat_w,  # [num_envs, 30, 4]
@@ -197,6 +210,7 @@ def extract_robot_state(env: ManagerBasedEnv) -> dict:
         "joint_vel": joint_vel,  # [num_envs, 29]
         "root_pos": root_pos,  # [num_envs, 3]
         "root_rot": root_rot,  # [num_envs, 4]
+        "motion_idx": motion_idx,  # [num_envs] - which motion file (for data collection)
     }
 
 

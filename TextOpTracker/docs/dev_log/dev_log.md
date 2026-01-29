@@ -9,6 +9,14 @@
 
 ## Prompt
 
+### 20260129 data_collection motion id
+
+for now the `deterministic` mode in #file:data_collection.py has a problem: the collected motions are not in order (motions are not arranged like motion1:eps0-49, motion2:eps50-99, etc), hence you don't know what the motion is the sample collected from.
+
+Therefore, I hope you add "motion_idx" of the current env in #sym:extract_robot_state  (You can get it from #file:commands_collection.py  ) function, so that in #file:data_collection.py ,  we can add motion id to the dataset of each episode.
+
+This is convenient for later on motion dyeing.
+
 ### 20260108 data_collection improvement
 
 I need to implement a new data collection strategy. Requirements:
