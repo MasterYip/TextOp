@@ -52,9 +52,7 @@ from isaaclab.sim import SimulationContext
 from isaaclab.utils import configclass
 from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR
 
-# Add parent directory to path for imports
-sys.path.append(str(Path(__file__).parent.parent))
-from replay_buffer import ReplayBuffer
+from diffusion_policy.utils.replay_buffer import ReplayBuffer
 
 ##
 # Pre-defined configs

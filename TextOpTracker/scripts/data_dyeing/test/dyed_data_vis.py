@@ -44,7 +44,7 @@ import motionclip
 from motionclip import get_motion_clip, get_motion_text_mapping, retrieve_motions, encode_motions, get_datasets, clip
 
 # Import local utilities
-from replay_buffer import ReplayBuffer
+from diffusion_policy.utils.replay_buffer import ReplayBuffer
 from visualize_utils import G1MotionVisualizer
 from body_index_mapping import remap_isaaclab_to_motionclip
 

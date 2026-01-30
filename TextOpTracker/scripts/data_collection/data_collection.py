@@ -43,7 +43,7 @@ from tqdm import tqdm
 ROOT_DIR = str(Path(__file__).parent)
 sys.path.append(ROOT_DIR)
 
-from replay_buffer import ReplayBuffer
+from diffusion_policy.utils.replay_buffer import ReplayBuffer
 
 
 class OUNoise:

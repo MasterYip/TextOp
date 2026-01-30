@@ -36,7 +36,7 @@ from src.utils.get_model_and_data import get_motion_clip
 
 # Import local utilities
 from motion_converter import G1MotionConverter, extract_motion_window, create_motion_batches, load_motion_npz
-from replay_buffer import ReplayBuffer
+from diffusion_policy.utils.replay_buffer import ReplayBuffer
 
 
 class MotionDataDyer:
@@ -397,7 +397,7 @@ class MotionDataDyer:
         mismatches = []
         valid_episodes = []  # Track episodes that match
         clipped_episodes = []  # Track episodes that were clipped
-        
+        slight_clip_episodes = []  # Track episodes that were slightly clipped
         for ep_idx in tqdm(range(self.buffer.n_episodes), desc="Attaching latents"):
             ep_start = episode_starts[ep_idx]
             ep_end = episode_ends[ep_idx]
@@ -422,7 +422,10 @@ class MotionDataDyer:
                         # Sample shorter than motion: clip motion to match sample
                         all_latents[ep_start:ep_end] = motion_latents[:ep_length]
                         valid_episodes.append(ep_idx)
-                        clipped_episodes.append((ep_idx, motion_idx, ep_length, motion_length))
+                        if ep_length == motion_length -1:
+                            slight_clip_episodes.append((ep_idx, motion_idx, ep_length, motion_length))
+                        else:
+                            clipped_episodes.append((ep_idx, motion_idx, ep_length, motion_length))
                     else:
                         # Sample longer than motion: drop episode
                         print(f"  [WARNING] Episode {ep_idx} length {ep_length} > motion {motion_idx} length {motion_length}. Dropping.")
@@ -450,6 +453,9 @@ class MotionDataDyer:
                 valid_episodes.append(ep_idx)
         
         # Print statistics
+        if slight_clip_episodes:
+            print(f"\n  [INFO] Slightly clipped {len(slight_clip_episodes)} episodes (sample == motion - 1):")
+
         if clipped_episodes:
             print(f"\n  [INFO] Clipped {len(clipped_episodes)} episodes (sample < motion):")
             for ep_idx, motion_idx, ep_len, motion_len in clipped_episodes[:10]:
@@ -472,8 +478,9 @@ class MotionDataDyer:
         
         print(f"\n  Policy: '{mismatch_policy}'")
         print(f"  Attached latents for {len(valid_episodes)}/{self.buffer.n_episodes} episodes")
-        print(f"  - Perfect matches: {len(valid_episodes) - len(clipped_episodes)}")
-        print(f"  - Clipped (sample < motion): {len(clipped_episodes)}")
+        print(f"  - Perfect matches: {len(valid_episodes) - len(clipped_episodes) - len(slight_clip_episodes)}")
+        print(f"  - Slightly clipped (sample == motion - 1): {len(slight_clip_episodes)}")
+        print(f"  - Clipped (sample < motion - 1): {len(clipped_episodes)}")
         print(f"  - Removed: {len(mismatches)}")
         
         return all_latents, valid_episodes

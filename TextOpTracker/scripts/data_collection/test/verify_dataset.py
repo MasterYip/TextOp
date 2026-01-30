@@ -19,7 +19,7 @@ def verify_dataset(zarr_path: str):
     ROOT_DIR = str(Path(__file__).parent.parent)
     sys.path.append(ROOT_DIR)
 
-    from replay_buffer import ReplayBuffer
+    from diffusion_policy.utils.replay_buffer import ReplayBuffer
     
     print(f"Loading dataset from: {zarr_path}")
     

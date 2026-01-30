@@ -9,7 +9,7 @@ from pathlib import Path
 SCRIPT_DIR = Path(__file__).parent
 sys.path.insert(0, str(SCRIPT_DIR.parent))
 
-from replay_buffer import ReplayBuffer
+from diffusion_policy.utils.replay_buffer import ReplayBuffer
 import numpy as np
 
 
