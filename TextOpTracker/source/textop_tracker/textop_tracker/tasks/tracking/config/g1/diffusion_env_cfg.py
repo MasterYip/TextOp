@@ -76,6 +76,7 @@ class G1DiffusionEnvCfg(TrackingEnvCfg):
         self.events.physics_material = None
         self.events.add_joint_default_pos = None
         self.events.base_com = None
+        self.episode_length_s = 200.0
 
         self.terminations = self.terminations.replace(
             anchor_pos=DoneTerm(func=mdp.bad_anchor_pos_z_only,
@@ -89,3 +90,9 @@ class G1DiffusionEnvCfg(TrackingEnvCfg):
         )
 
         # self.scene.robot.spawn.fix_base = True
+
+        self.viewer.eye = (3.0, 0.0, 0.0)
+        self.viewer.lookat = (0.0, 0.0, 0.0)
+        # self.viewer.origin_type = "env"
+        self.viewer.origin_type = "asset_root"
+        self.viewer.asset_name = "robot"

@@ -16,7 +16,7 @@ def verify_dataset(zarr_path: str):
     """Verify that the dataset has the correct structure."""
     
     # Add paths for imports
-    ROOT_DIR = str(Path(__file__).parent)
+    ROOT_DIR = str(Path(__file__).parent.parent)
     sys.path.append(ROOT_DIR)
 
     from replay_buffer import ReplayBuffer

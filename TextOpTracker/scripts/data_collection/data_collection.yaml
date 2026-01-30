@@ -6,7 +6,7 @@ defaults:
 
 # Output configuration
 output:
-  dir: "artifacts/g1_tracking_dataset"
+  dir: "artifacts/g1_walk"
   zarr_name: "motion.zarr"
   compressor: "disk"  # Use zstd compression for disk storage
   chunk_length: -1  # -1 for auto, or specify chunk size
@@ -16,7 +16,7 @@ output:
 task:
   # name: "Tracking-Flat-G1-ProjGravObs-MNMLP-v0"
   name: "Tracking-Flat-G1-ProjGravObs-MNMLP-CollectData-v0"
-  num_envs: 1536
+  num_envs: 4000
   # max_episode_length: 1000 # unused
   seed: 42
 
@@ -60,7 +60,7 @@ noise:
   # OU noise parameters: η_{t+1} = η_t + θ(μ - η_t)Δt + σ√Δt ε_t
   theta: 0.8      # Mean reversion rate
   mu: 0.0         # Long-term mean
-  sigma: 0.1      # Joint-wise noise scale
+  sigma: 0.2      # Joint-wise noise scale
   dt: 0.02         # Time step
   
   # Alternative: Gaussian i.i.d. noise (set type to "gaussian")

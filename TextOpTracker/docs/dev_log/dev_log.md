@@ -1,7 +1,7 @@
 
 ## BUG
 
-- [ ] 20260129 DataCollection Episode len do not match origin motion
+- [x] 20260129 DataCollection Episode len do not match origin motion: clip or drop
 - [x] 20260106 DataCollection Episode is not continuous
 
 
@@ -12,7 +12,7 @@
 
 ## Prompt
 
-### 20260129 motion dyeing from original files
+### 20260129 motion dyeing from original files (can improve robusty)
 
 I hope to add an option `dyeing_from_origin_motion` in #file:data_dyeing.yaml . If enabled, it will loads motion files from selected motions like #file:data_collection.py .  You just dye original motions and cache the latent, then attach to the recorded samples according to motion_idx.
 

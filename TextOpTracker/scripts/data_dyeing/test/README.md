@@ -24,9 +24,9 @@ Visualization tools for motion data encoded with CLIP latent vectors.
 cd TextOpTracker/scripts/data_dyeing/test
 
 python dyed_data_vis.py \
-    --episodes-range 0 10 \
-    --zarr_path ../../../artifacts/g1_multimotion_noise_median/motion_dyed.zarr \
-    --checkpoint ../../../../MotionCLIP/exps/g1-model-xyz/checkpoint_0100.pth.tar
+    --episode 0 50 100 150 200 250 300 350 \
+    --zarr_path ../../../artifacts/g1_walk/motion_dyed_text_t0.01.zarr \
+    --checkpoint ../../../../MotionCLIP/exps/g1-model-xyz-clip/checkpoint_0100.pth.tar
 ```
 
 ### Advanced Options
@@ -80,9 +80,9 @@ python dyed_data_vis.py \
 **Save embeddings at 50-frame intervals:**
 ```bash
 python dyed_data_vis.py \
-    --zarr_path ../../../artifacts/g1_multimotion_noise_median/motion_dyed.zarr \
-    --checkpoint ../../../../MotionCLIP/exps/g1-model-xyz/checkpoint_0100.pth.tar \
-    --episode 3 \
+    --zarr_path /home/user/CodeSpace/HumanoidCtrl/TextOp/diffuse_cloc/data/g1_sub55_noise/motion_dyed.zarr \
+    --checkpoint ../../../../MotionCLIP/exps/g1-model-xyz-clip/checkpoint_0100.pth.tar \
+    --episode 0 \
     --save-embeddings \
     --embedding-interval 50 \
     --embedding-format pt \
