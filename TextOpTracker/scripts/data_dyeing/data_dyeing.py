@@ -717,7 +717,7 @@ class MotionDataDyer:
         print(f"  Output path: {self.cfg.output.zarr_path}")
         
         # Filter buffer if valid_episodes is provided
-        if valid_episodes is not None:
+        if valid_episodes is not None and len(valid_episodes) != self.buffer.n_episodes:
             print(f"  Filtering dataset to keep only {len(valid_episodes)}/{self.buffer.n_episodes} valid episodes...")
             
             # Create filtered buffer with only valid episodes
@@ -787,7 +787,8 @@ class MotionDataDyer:
         self.buffer.save_to_path(
             self.cfg.output.zarr_path,
             compressors=compressor_dict,
-            if_exists='replace'
+            if_exists='replace',
+            verbose=True
         )
         
         print(f"  Dataset saved successfully!")
