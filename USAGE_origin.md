@@ -296,8 +296,8 @@ source install/setup.bash
 
 Environment Activation: in every time before running
 ```bash
-conda activate pdplanner
-cd TextOpDeploy/src/unitree_ros2/ && source setup_local.sh && cd -
+conda activate textop
+cd TextOpDeploy/src/unitree_ros2/ && source setup.sh && cd -
 cd TextOpDeploy
 source install/setup.bash
 
@@ -310,17 +310,15 @@ export ROS_DOMAIN_ID=0
 ```bash
 # Open terminal-1, activate the environment
 ros2 launch textop_ctrl textop_onnx_controller.launch.py \
-    onnx_path:=/home/user/CodeSpace/Diffusion/TextOp/TextOpTracker/logs/rsl_rl/Pretrained/checkpoints/latest.onnx
-
+    onnx_path:=/path/to/policy.onnx
 
 # Open terminal-2, start unitree_mujoco simulator
-cd ./src/unitree_mujoco/simulate/build
 ./unitree_mujoco -r g1 -n lo -i 0
 
 # Open terminal-3, activate the environment
 # This program send an example motion file to the policy as a trigger.
 # The example `motion.npz` is corresponding to https://github.com/TeleHuman/PBHC/blob/main/example/motion_data/Horse-stance_pose.pkl
-python src/textop_ctrl/scripts/npz_motion_publisher.py --mode single /home/user/CodeSpace/Diffusion/TextOp/diffuse_cloc/test/tracking_rl_deploy/zero_motion.npz
+python src/byd_ctrl/scripts/npz_motion_publisher.py --mode single TextOpDeploy/src/textop_ctrl/models/motion.npz
 
 # Joystick: Press start and then press A. The Tracker and RobotMDAR will begin.
 ```
@@ -333,10 +331,10 @@ python src/textop_ctrl/scripts/npz_motion_publisher.py --mode single /home/user/
 
 # Open terminal-3, start RobotMDAR: activate the ros workspace and `textop` python environment
 # Modify the config of RobotMDAR in `TextOpDeploy/src/textop_ctrl/config/rmdar_config.yaml` to choose the RobotMDAR checkpoint and inference parameters.
-python src/textop_ctrl/scripts/rmdar.py 
+python src/byd_ctrl/scripts/rmdar.py 
 
 # (Optional) Open terminal-3, start a motion watcher to visualize the generated reference motion.
-python src/textop_ctrl/scripts/motion_watcher.py 
+python src/byd_ctrl/scripts/motion_watcher.py 
 
 # In your joystick, first press `start` and then press `A`, the Tracker and RobotMDAR should start in the same times. Enter some words to RobotMDAR to instruct the Robot.
 
@@ -400,7 +398,7 @@ ros2 launch textop_ctrl textop_onnx_controller.launch.py \
 ```
 4. In PC, start the `rmdar` and `motion_watcher` the same as in Sim2Sim. You can also visualize the state of real robot by:
 ```bash
-python src/textop_ctrl/scripts/show_realrobot.py 
+python src/byd_ctrl/scripts/show_realrobot.py 
 ```
 5. Press `Start`. G1 will smoothly go to a default pose. Place it on flat ground and it should stand still.
 6. Press `A`. The Tracker and RobotMDAR policy will start inference in the same time. G1 will track the reference motion corresponding to default command `stand`. 
