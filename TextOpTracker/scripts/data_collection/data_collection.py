@@ -27,6 +27,7 @@ Collection Modes:
 """
 
 import glob
+import json
 import os
 import sys
 import time
@@ -44,6 +45,7 @@ ROOT_DIR = str(Path(__file__).parent)
 sys.path.append(ROOT_DIR)
 
 from diffusion_policy.utils.replay_buffer import ReplayBuffer
+from diffusion_policy.utils.g1fk_torch import build_fk_calculator
 
 
 class OUNoise:
@@ -250,6 +252,20 @@ def collect_data(cfg: DictConfig):
         else:
             raise ValueError(f"Unknown noise type: {cfg.noise.type}")
     
+    # Initialize FK calculator if enabled
+    fk_calculator = None
+    if cfg.fk.use_fk:
+        print(f"[INFO] Forward Kinematics ENABLED")
+        print(f"[INFO] FK backend: {cfg.fk.fk_type}, device: {cfg.fk.fk_device}")
+        fk_calculator = build_fk_calculator(
+            fk_type=cfg.fk.fk_type,
+            urdf_path=cfg.fk.urdf_path,
+            device=cfg.fk.fk_device,
+        )
+        print(f"[INFO] FK calculator initialized")
+    else:
+        print(f"[INFO] Forward Kinematics DISABLED (using simulation body states)")
+    
     # Initialize replay buffer
     buffer = ReplayBuffer.create_empty_numpy()
     
@@ -316,6 +332,37 @@ def collect_data(cfg: DictConfig):
             
             # Extract robot state before step (returns tensors)
             robot_state = extract_robot_state(env_unwrapped)
+            
+            # Compute FK if enabled (replaces body_pos and body_lin_vel)
+            if fk_calculator is not None:
+                # Prepare FK inputs (batch mode)
+                joint_pos_batch = robot_state["joint_pos"]  # [num_envs, 29]
+                joint_vel_batch = robot_state["joint_vel"]  # [num_envs, 29]
+                root_quat = robot_state["root_rot"]  # [num_envs, 4] in [w,x,y,z] format
+                root_ang_vel = robot_state["body_ang_vel"][:, 0, :]  # [num_envs, 3] - pelvis angular vel
+                root_lin_vel = robot_state["body_lin_vel"][:, 0, :]  # [num_envs, 3] - pelvis linear vel
+                root_pos = robot_state["root_pos"]  # [num_envs, 3]
+                
+                # Compute FK (returns dict with torch tensors)
+                fk_result = fk_calculator.compute_fk(
+                    joint_pos=joint_pos_batch.cpu().numpy() if isinstance(joint_pos_batch, torch.Tensor) else joint_pos_batch,
+                    joint_vel=joint_vel_batch.cpu().numpy() if isinstance(joint_vel_batch, torch.Tensor) else joint_vel_batch,
+                    imu_pose=root_quat.cpu().numpy() if isinstance(root_quat, torch.Tensor) else root_quat,  # FK accepts quat [w,x,y,z]
+                    imu_gyro=root_ang_vel.cpu().numpy() if isinstance(root_ang_vel, torch.Tensor) else root_ang_vel,
+                    base_lin_vel=root_lin_vel.cpu().numpy() if isinstance(root_lin_vel, torch.Tensor) else root_lin_vel,
+                    base_pos=root_pos.cpu().numpy() if isinstance(root_pos, torch.Tensor) else root_pos,
+                    isaaclab_q_order=True,
+                )
+                
+                # Replace body_pos and body_lin_vel with FK results
+                # FK returns numpy arrays or torch tensors depending on batch size
+                if isinstance(fk_result['body_pos'], torch.Tensor):
+                    robot_state["body_pos"] = fk_result['body_pos']
+                    robot_state["body_lin_vel"] = fk_result['body_lin_vel']
+                else:
+                    # Single sample returns numpy, convert to torch
+                    robot_state["body_pos"] = torch.from_numpy(fk_result['body_pos']).to(robot_state["body_pos"].device)
+                    robot_state["body_lin_vel"] = torch.from_numpy(fk_result['body_lin_vel']).to(robot_state["body_lin_vel"].device)
             
             # Convert to numpy for storage
             robot_state_np = {
@@ -514,10 +561,12 @@ def collect_data(cfg: DictConfig):
             'sigma': cfg.noise.sigma,
             'dt': cfg.noise.dt,
         } if cfg.noise.enable and cfg.noise.type == "ou" else None,
+        'fk_enabled': cfg.fk.use_fk,
+        'fk_type': cfg.fk.fk_type if cfg.fk.use_fk else None,
+        'fk_device': cfg.fk.fk_device if cfg.fk.use_fk else None,
         'creation_time': time.strftime("%Y-%m-%d %H:%M:%S")
     }
     
-    import json
     metadata_path = os.path.join(output_dir, "metadata.json")
     with open(metadata_path, 'w') as f:
         json.dump(metadata, f, indent=2)

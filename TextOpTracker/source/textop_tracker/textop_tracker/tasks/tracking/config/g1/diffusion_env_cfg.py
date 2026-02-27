@@ -69,7 +69,7 @@ class G1DiffusionEnvCfg(TrackingEnvCfg):
         #     raise FileNotFoundError(f"No motion.npz found in {ROOT_DIR / 'artifacts' / 'Data10k-open'}")
         
         # Placeholder motion file path (not used during diffusion policy execution)
-        self.commands.motion.motion_files = ["/home/user/CodeSpace/HumanoidCtrl/TextOp/TextOpTracker/artifacts/Data10k-open/homejrhangmr_dataset_pbhc_contact_maskACCADFemale1General_c3dA1-Stand_posespkl/motion.npz"]
+        self.commands.motion.motion_files = ["/home/user/CodeSpace/Diffusion/TextOp/TextOpTracker/artifacts/Data10k-open/homejrhangmr_dataset_pbhc_contact_maskACCADFemale1General_c3dA1-Stand_posespkl/motion.npz"]
         self.commands.motion.freeze_motion = True
         # Disable domain randomization for clean evaluation
         self.events.push_robot = None

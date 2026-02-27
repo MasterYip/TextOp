@@ -720,6 +720,21 @@ class MotionDataDyer:
         if valid_episodes is not None and len(valid_episodes) != self.buffer.n_episodes:
             print(f"  Filtering dataset to keep only {len(valid_episodes)}/{self.buffer.n_episodes} valid episodes...")
             
+            # First, filter latents to match valid episodes
+            # Compute which frames belong to valid episodes
+            episode_ends = self.buffer.episode_ends[:]
+            
+            # Build mask for valid frames
+            valid_frame_mask = np.zeros(self.total_frames, dtype=bool)
+            for ep_idx in valid_episodes:
+                ep_start = 0 if ep_idx == 0 else episode_ends[ep_idx - 1]
+                ep_end = episode_ends[ep_idx]
+                valid_frame_mask[ep_start:ep_end] = True
+            
+            # Filter latents
+            latents = latents[valid_frame_mask]
+            print(f"  Filtered latents: {latents.shape}")
+            
             # Create filtered buffer with only valid episodes
             filtered_buffer = ReplayBuffer.create_empty_zarr()
             
