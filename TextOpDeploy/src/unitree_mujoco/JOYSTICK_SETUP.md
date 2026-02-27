@@ -5,15 +5,14 @@ This guide explains how to create a virtual joystick device at `/dev/input/js0` 
 ## Quick Start
 
 ```bash
-# 1. Install dependencies
+# Install evdev (recommended)
 sudo apt-get install python3-evdev
-# OR
-sudo apt-get install python3-uinput
 
-# 2. Load uinput kernel module
+# OR Install uinput (not works)
+sudo apt-get install python3-uinput
 sudo modprobe uinput
 
-# 3. Run the dummy joystick
+# Run the dummy joystick
 sudo python dummy_joystick.py
 ```
 
