@@ -25,15 +25,15 @@ class G1DiffusionDataCollectionEnvCfg(G1FlatProjGravObsEnvCfg_MotionEndReset):
             # Raw robot state components with configurable noise for data collection
             body_pos = ObsTerm(
                 func=mdp.robot_body_pos_all,
-                noise=Unoise(n_min=-0.01, n_max=0.01)  # ±1cm noise on positions
+                noise=Unoise(n_min=-0.05, n_max=0.05)  # ±1cm noise on positions
             )
             body_rot = ObsTerm(
                 func=mdp.robot_body_rot_all,
-                noise=Unoise(n_min=-0.02, n_max=0.02)  # Small noise on quaternions
+                noise=Unoise(n_min=-0.1, n_max=0.1)  # Small noise on quaternions
             )
             body_lin_vel = ObsTerm(
                 func=mdp.robot_body_lin_vel_all,
-                noise=Unoise(n_min=-0.05, n_max=0.05)  # ±5cm/s noise on velocities
+                noise=Unoise(n_min=-0.3, n_max=0.3)  # ±20cm/s noise on velocities
             )
             body_ang_vel = ObsTerm(
                 func=mdp.robot_body_ang_vel_all,
@@ -41,11 +41,11 @@ class G1DiffusionDataCollectionEnvCfg(G1FlatProjGravObsEnvCfg_MotionEndReset):
             )
             joint_pos = ObsTerm(
                 func=mdp.robot_joint_pos_all,
-                noise=Unoise(n_min=-0.01, n_max=0.01)  # ±0.01 rad noise on joint positions
+                noise=None  # ±0.01 rad noise on joint positions
             )
             joint_vel = ObsTerm(
                 func=mdp.robot_joint_vel_all,
-                noise=Unoise(n_min=-0.05, n_max=0.05)  # ±0.05 rad/s noise on joint velocities
+                noise=None  # ±0.05 rad/s noise on joint velocities
             )
             root_pos = ObsTerm(
                 func=mdp.robot_root_pos,

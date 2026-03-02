@@ -24,8 +24,8 @@ The data dyeing process:
 
 ```bash
 python data_dyeing.py \
-  input.zarr_path=../../artifacts/g1_walk/motion.zarr \
-  output.zarr_path=../../artifacts/g1_walk/motion_dyed_text_t0.01.zarr \
+  input.zarr_path=../../artifacts/g1_152_obsnoise/motion.zarr \
+  output.zarr_path=../../artifacts/g1_152_obsnoise/motion_dyed_text_t0.01.zarr \
   motionclip.checkpoint_path=../../../MotionCLIP/exps/g1-model-xyz-clip/checkpoint_0100.pth.tar \
   encoding.use_text_alignment=true
 ```

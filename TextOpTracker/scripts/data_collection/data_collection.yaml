@@ -6,7 +6,7 @@ defaults:
 
 # Output configuration
 output:
-  dir: "artifacts/g1_walk"
+  dir: "artifacts/g1_152_obsnoise"
   zarr_name: "motion.zarr"
   compressor: "disk"  # Use zstd compression for disk storage
   chunk_length: -1  # -1 for auto, or specify chunk size
@@ -67,10 +67,13 @@ noise:
   # Alternative: Gaussian i.i.d. noise (set type to "gaussian")
   # gaussian_std: 0.1
 
+  # IMPORTANT: Observation noise is applied in 
+  # `TextOpTracker/source/textop_tracker/textop_tracker/tasks/tracking/config/g1/diffusion_env_cfg.py`
+
 # Forward Kinematics (optional)
 # Use PyTorch FK to compute body positions/velocities for better alignment
 fk:
-  use_fk: true  # Enable FK computation (replaces body_pos and body_lin_vel)
+  use_fk: false  # Enable FK computation (replaces body_pos and body_lin_vel)
   fk_type: "torch"  # FK backend: "pinocchio" or "torch"
   fk_device: "cuda"  # Device for FK computation: "cpu" or "cuda"
   urdf_path: "/home/user/CodeSpace/Diffusion/TextOp/TextOpTracker/source/textop_tracker/textop_tracker/assets/unitree_description/urdf/g1/main.urdf"
