@@ -12,6 +12,19 @@
 
 ## Prompt
 
+### 20260302 Data collection observation update
+
+    # Extract robot state before step (returns tensors)
+    robot_state = extract_robot_state(env_unwrapped)
+    
+ In #file:data_collection.py , the robot_state are collected through `extract_robot_state` function directly. Now I hope to optimize the observation obtain method.
+
+I need you do things listed below:
+1. Move the data collection related envcfg in #file:flat_env_cfg.py  to  #file:diffusion_env_cfg.py . Update #file:__init__.py .
+2. I hope in #file:data_collection.py , the obs are used for RL policy inference, the priv_obs used for datacollection(for diffusion model obs). Update #file:observations.py  and #file:diffusion_env_cfg.py  to create a new diffusion observation cfg class for the priv obs with unoise. You can see how the observation are defined in #file:tracking_env_cfg.py .
+3. The #sym:extract_robot_state  method extract clean states only, but I hope to assign different noise to each term, this is my intention.
+
+
 ### 20260129 motion dyeing from original files (can improve robusty)
 
 I hope to add an option `dyeing_from_origin_motion` in #file:data_dyeing.yaml . If enabled, it will loads motion files from selected motions like #file:data_collection.py .  You just dye original motions and cache the latent, then attach to the recorded samples according to motion_idx.

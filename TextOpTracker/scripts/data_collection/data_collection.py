@@ -313,9 +313,6 @@ def collect_data(cfg: DictConfig):
     else:
         target_episodes = float('inf')  # No limit
         pbar = tqdm(total=cfg.collection.len_to_save, desc="Collecting data")
-    
-    # Import extract_robot_state from textop_tracker for consistency
-    from textop_tracker.tasks.tracking.mdp.observations import extract_robot_state
 
     with torch.inference_mode():
         while simulation_app.is_running():
@@ -330,8 +327,22 @@ def collect_data(cfg: DictConfig):
             # Get action from policy
             actions = policy(obs)
             
-            # Extract robot state before step (returns tensors)
-            robot_state = extract_robot_state(env_unwrapped)
+            # Extract robot state with noise from privileged observations
+            # The observation manager applies noise internally based on the ObsTerm config
+            priv_obs = wrapped_env.env.observation_manager.compute_group("critic")
+            
+            # Reshape observations from flat vectors back to original shapes
+            robot_state = {
+                "body_pos": priv_obs["body_pos"].reshape(-1, 30, 3),      # [num_envs, 30, 3]
+                "body_rot": priv_obs["body_rot"].reshape(-1, 30, 4),      # [num_envs, 30, 4]
+                "body_lin_vel": priv_obs["body_lin_vel"].reshape(-1, 30, 3),  # [num_envs, 30, 3]
+                "body_ang_vel": priv_obs["body_ang_vel"].reshape(-1, 30, 3),  # [num_envs, 30, 3]
+                "joint_pos": priv_obs["joint_pos"],                       # [num_envs, 29]
+                "joint_vel": priv_obs["joint_vel"],                       # [num_envs, 29]
+                "root_pos": priv_obs["root_pos"],                         # [num_envs, 3]
+                "root_rot": priv_obs["root_rot"],                         # [num_envs, 4]
+                "motion_idx": priv_obs["motion_idx"].long(),              # [num_envs]
+            }
             
             # Compute FK if enabled (replaces body_pos and body_lin_vel)
             if fk_calculator is not None:

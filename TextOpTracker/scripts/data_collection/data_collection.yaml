@@ -15,7 +15,8 @@ output:
 # Task and environment configuration
 task:
   # name: "Tracking-Flat-G1-ProjGravObs-MNMLP-v0"
-  name: "Tracking-Flat-G1-ProjGravObs-MNMLP-CollectData-v0"
+  # name: "Tracking-Flat-G1-ProjGravObs-MNMLP-CollectData-v0"  # Old env (using extract_robot_state)
+  name: "Isaac-TextOp-DataCollection-G1-v0"  # New env with priv_obs for data collection with noise
   num_envs: 4000
   # max_episode_length: 1000 # unused
   seed: 42

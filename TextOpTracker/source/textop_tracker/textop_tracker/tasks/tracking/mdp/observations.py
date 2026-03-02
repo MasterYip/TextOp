@@ -214,6 +214,76 @@ def extract_robot_state(env: ManagerBasedEnv, command_name: str = "motion") -> d
     }
 
 
+def robot_body_pos_all(env: ManagerBasedEnv) -> torch.Tensor:
+    """Extract all body positions [num_envs, 30, 3] for data collection with noise."""
+    robot = env.scene["robot"]
+    body_pos_w = robot.data.body_pos_w.clone()
+    env_origins = env.scene.env_origins
+    body_pos_w = body_pos_w - env_origins[:, None, :]
+    return body_pos_w.view(env.num_envs, -1)  # [num_envs, 90]
+
+
+def robot_body_rot_all(env: ManagerBasedEnv) -> torch.Tensor:
+    """Extract all body rotations [num_envs, 30, 4] for data collection with noise."""
+    robot = env.scene["robot"]
+    body_quat_w = robot.data.body_quat_w.clone()
+    return body_quat_w.view(env.num_envs, -1)  # [num_envs, 120]
+
+
+def robot_body_lin_vel_all(env: ManagerBasedEnv) -> torch.Tensor:
+    """Extract all body linear velocities [num_envs, 30, 3] for data collection with noise."""
+    robot = env.scene["robot"]
+    body_lin_vel_w = robot.data.body_lin_vel_w.clone()
+    return body_lin_vel_w.view(env.num_envs, -1)  # [num_envs, 90]
+
+
+def robot_body_ang_vel_all(env: ManagerBasedEnv) -> torch.Tensor:
+    """Extract all body angular velocities [num_envs, 30, 3] for data collection with noise."""
+    robot = env.scene["robot"]
+    body_ang_vel_w = robot.data.body_ang_vel_w.clone()
+    return body_ang_vel_w.view(env.num_envs, -1)  # [num_envs, 90]
+
+
+def robot_joint_pos_all(env: ManagerBasedEnv) -> torch.Tensor:
+    """Extract all joint positions [num_envs, 29] for data collection with noise."""
+    robot = env.scene["robot"]
+    joint_pos = robot.data.joint_pos.clone()
+    return joint_pos  # [num_envs, 29]
+
+
+def robot_joint_vel_all(env: ManagerBasedEnv) -> torch.Tensor:
+    """Extract all joint velocities [num_envs, 29] for data collection with noise."""
+    robot = env.scene["robot"]
+    joint_vel = robot.data.joint_vel.clone()
+    return joint_vel  # [num_envs, 29]
+
+
+def robot_root_pos(env: ManagerBasedEnv) -> torch.Tensor:
+    """Extract root position [num_envs, 3] for data collection with noise."""
+    robot = env.scene["robot"]
+    body_pos_w = robot.data.body_pos_w[:, 0, :].clone()
+    env_origins = env.scene.env_origins
+    root_pos = body_pos_w - env_origins
+    return root_pos  # [num_envs, 3]
+
+
+def robot_root_rot(env: ManagerBasedEnv) -> torch.Tensor:
+    """Extract root rotation [num_envs, 4] for data collection with noise."""
+    robot = env.scene["robot"]
+    root_rot = robot.data.body_quat_w[:, 0, :].clone()
+    return root_rot  # [num_envs, 4]
+
+
+def robot_motion_idx(env: ManagerBasedEnv, command_name: str = "motion") -> torch.Tensor:
+    """Extract motion index [num_envs] for data collection."""
+    try:
+        motion_command = env.command_manager.get_term(command_name)
+        motion_idx = motion_command.motion_idx.clone().float()  # Convert to float for consistency
+    except (AttributeError, KeyError):
+        motion_idx = torch.zeros(env.num_envs, dtype=torch.float32, device=env.device)
+    return motion_idx  # [num_envs]
+
+
 def diffusion_state_observation(env: ManagerBasedEnv) -> torch.Tensor:
     """
     Extract raw robot state data for diffusion policy.

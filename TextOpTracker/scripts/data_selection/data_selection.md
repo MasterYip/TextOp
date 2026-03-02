@@ -27,7 +27,7 @@
 ## Usage:
 
 ```bash
-cd /home/user/CodeSpace/HumanoidCtrl/TextOp/TextOpTracker
+cd /home/user/CodeSpace/Diffusion/TextOp/TextOpTracker
 python ./scripts/data_selection/data_selection.py \
     --motion_pattern "Data10k-open/*" \
     --output_dir ./artifacts/selected_motions \
