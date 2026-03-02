@@ -329,7 +329,7 @@ def collect_data(cfg: DictConfig):
             
             # Extract robot state with noise from diffusion observations
             # The observation manager applies noise internally based on the ObsTerm config
-            diffusion_obs_concat = wrapped_env.env.observation_manager.compute_group("diffusion")
+            diffusion_obs_concat = wrapped_env.unwrapped.observation_manager.compute_group("diffusion")
             
             # Split concatenated observations back to components
             # Order: body_pos(90), body_rot(120), body_lin_vel(90), body_ang_vel(90),
