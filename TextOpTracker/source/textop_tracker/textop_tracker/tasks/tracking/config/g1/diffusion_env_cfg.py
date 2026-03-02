@@ -7,41 +7,21 @@ from isaaclab.utils.noise import AdditiveUniformNoiseCfg as Unoise
 
 from textop_tracker.robots.g1 import G1_ACTION_SCALE, G1_CYLINDER_CFG
 from textop_tracker.tasks.tracking.tracking_env_cfg import TrackingEnvCfg, ProjGravObservationsCfg
+from textop_tracker.tasks.tracking.config.g1.flat_env_cfg import G1FlatProjGravObsEnvCfg_MotionEndReset
 import textop_tracker.tasks.tracking.mdp as mdp
 from isaaclab.managers import TerminationTermCfg as DoneTerm
 
 @configclass
-class G1DiffusionDataCollectionEnvCfg(TrackingEnvCfg):
+class G1DiffusionDataCollectionEnvCfg(G1FlatProjGravObsEnvCfg_MotionEndReset):
     """Configuration for G1 data collection - uses RL policy for inference, priv_obs for data."""
     
     @configclass
-    class DataCollectionObservationsCfg:
-        """Observations for data collection."""
+    class DataCollectionObservationsCfg(ProjGravObservationsCfg):
+        """Observations for data collection - extends ProjGrav with diffusion group."""
         
         @configclass
-        class PolicyCfg(ObsGroup):
-            """Policy observations for RL inference (ProjGrav observations)."""
-            # Projected gravity observations (for trained RL policy)
-            base_lin_vel = ObsTerm(func=mdp.base_lin_vel)
-            base_ang_vel = ObsTerm(func=mdp.base_ang_vel)
-            projected_gravity = ObsTerm(func=mdp.projected_gravity)
-            velocity_commands = ObsTerm(func=mdp.generated_commands, params={"command_name": "motion"})
-            joint_pos = ObsTerm(func=mdp.joint_pos_rel)
-            joint_vel = ObsTerm(func=mdp.joint_vel_rel)
-            actions = ObsTerm(func=mdp.last_action)
-            motion_anchor_pos_b = ObsTerm(func=mdp.motion_anchor_pos_b, params={"command_name": "motion"})
-            motion_anchor_ori_b = ObsTerm(func=mdp.motion_anchor_ori_b, params={"command_name": "motion"})
-            # Future anchor observations
-            motion_anchor_pos_b_future = ObsTerm(func=mdp.motion_anchor_pos_b_future, params={"command_name": "motion"})
-            motion_anchor_ori_b_future = ObsTerm(func=mdp.motion_anchor_ori_b_future, params={"command_name": "motion"})
-            
-            def __post_init__(self):
-                self.enable_corruption = False
-                self.concatenate_terms = True
-        
-        @configclass
-        class PrivilegedCfg(ObsGroup):
-            """Privileged observations for data collection - raw robot state with noise."""
+        class DiffusionCfg(ObsGroup):
+            """Diffusion observations for data collection - raw robot state with noise."""
             # Raw robot state components with configurable noise for data collection
             body_pos = ObsTerm(
                 func=mdp.robot_body_pos_all,
@@ -81,54 +61,21 @@ class G1DiffusionDataCollectionEnvCfg(TrackingEnvCfg):
             
             def __post_init__(self):
                 self.enable_corruption = True  # Enable noise for data collection
-                self.concatenate_terms = False  # Keep as dict for easy access
+                self.concatenate_terms = True  # Concatenate for easy splitting
         
-        policy: PolicyCfg = PolicyCfg()
-        critic: PrivilegedCfg = PrivilegedCfg()  # Use critic group for privileged obs
+        # Add diffusion group to existing policy and critic groups from ProjGravObservationsCfg
+        diffusion: DiffusionCfg = DiffusionCfg()
     
     observations: DataCollectionObservationsCfg = DataCollectionObservationsCfg()
     
     def __post_init__(self):
         super().__post_init__()
-        
-        # Set robot configuration (same as G1FlatProjGravObsEnvCfg)
-        self.scene.robot = G1_CYLINDER_CFG.replace(prim_path="{ENV_REGEX_NS}/Robot")
-        self.actions.joint_pos.scale = G1_ACTION_SCALE
-        
-        # Align reward weights and pfail_thresholds to match pretrained checkpoint
-        self.rewards.feet_slide.weight = -0.3
-        self.rewards.soft_landing.weight = -0.0003
-        self.rewards.overspeed.weight = -1.0
-        self.rewards.overeffort.weight = -1.0
-        
-        self.rewards.feet_slide.params["pfail_threshold"] = 1.0
-        self.rewards.soft_landing.params["pfail_threshold"] = 1.0
-        self.rewards.overspeed.params["pfail_threshold"] = 1.0
-        self.rewards.overeffort.params["pfail_threshold"] = 1.0
-        
-        # Set anchor body to pelvis (same as ProjGravObs config)
-        self.commands.motion.anchor_body_name = "pelvis"
-        
-        # Enable motion end reset for data collection
-        self.commands.motion.motion_end_reset = True
-        
-        # Configure body names for motion tracking
-        self.commands.motion.body_names = [
-            "pelvis",
-            "left_hip_roll_link",
-            "left_knee_link",
-            "left_ankle_roll_link",
-            "right_hip_roll_link",
-            "right_knee_link",
-            "right_ankle_roll_link",
-            "torso_link",
-            "left_shoulder_roll_link",
-            "left_elbow_link",
-            "left_wrist_yaw_link",
-            "right_shoulder_roll_link",
-            "right_elbow_link",
-            "right_wrist_yaw_link",
-        ]
+        # All configuration inherited from G1FlatProjGravObsEnvCfg_MotionEndReset:
+        # - Robot configuration
+        # - Reward weights and pfail_thresholds
+        # - Anchor body set to pelvis
+        # - Motion end reset enabled
+        # - Body names configured
         
         # Disable domain randomization for clean data collection
         self.events.push_robot = None

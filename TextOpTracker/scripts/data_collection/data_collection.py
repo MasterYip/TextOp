@@ -327,21 +327,28 @@ def collect_data(cfg: DictConfig):
             # Get action from policy
             actions = policy(obs)
             
-            # Extract robot state with noise from privileged observations
+            # Extract robot state with noise from diffusion observations
             # The observation manager applies noise internally based on the ObsTerm config
-            priv_obs = wrapped_env.env.observation_manager.compute_group("critic")
+            diffusion_obs_concat = wrapped_env.env.observation_manager.compute_group("diffusion")
+            
+            # Split concatenated observations back to components
+            # Order: body_pos(90), body_rot(120), body_lin_vel(90), body_ang_vel(90),
+            #        joint_pos(29), joint_vel(29), root_pos(3), root_rot(4), motion_idx(1)
+            # Total: 90+120+90+90+29+29+3+4+1 = 456 dims
+            split_sizes = [90, 120, 90, 90, 29, 29, 3, 4, 1]
+            obs_list = torch.split(diffusion_obs_concat, split_sizes, dim=-1)
             
             # Reshape observations from flat vectors back to original shapes
             robot_state = {
-                "body_pos": priv_obs["body_pos"].reshape(-1, 30, 3),      # [num_envs, 30, 3]
-                "body_rot": priv_obs["body_rot"].reshape(-1, 30, 4),      # [num_envs, 30, 4]
-                "body_lin_vel": priv_obs["body_lin_vel"].reshape(-1, 30, 3),  # [num_envs, 30, 3]
-                "body_ang_vel": priv_obs["body_ang_vel"].reshape(-1, 30, 3),  # [num_envs, 30, 3]
-                "joint_pos": priv_obs["joint_pos"],                       # [num_envs, 29]
-                "joint_vel": priv_obs["joint_vel"],                       # [num_envs, 29]
-                "root_pos": priv_obs["root_pos"],                         # [num_envs, 3]
-                "root_rot": priv_obs["root_rot"],                         # [num_envs, 4]
-                "motion_idx": priv_obs["motion_idx"].long(),              # [num_envs]
+                "body_pos": obs_list[0].reshape(-1, 30, 3),      # [num_envs, 30, 3]
+                "body_rot": obs_list[1].reshape(-1, 30, 4),      # [num_envs, 30, 4]
+                "body_lin_vel": obs_list[2].reshape(-1, 30, 3),  # [num_envs, 30, 3]
+                "body_ang_vel": obs_list[3].reshape(-1, 30, 3),  # [num_envs, 30, 3]
+                "joint_pos": obs_list[4],                        # [num_envs, 29]
+                "joint_vel": obs_list[5],                        # [num_envs, 29]
+                "root_pos": obs_list[6],                         # [num_envs, 3]
+                "root_rot": obs_list[7],                         # [num_envs, 4]
+                "motion_idx": obs_list[8].squeeze(-1).long(),    # [num_envs] - squeeze back to scalar per env
             }
             
             # Compute FK if enabled (replaces body_pos and body_lin_vel)

@@ -275,13 +275,13 @@ def robot_root_rot(env: ManagerBasedEnv) -> torch.Tensor:
 
 
 def robot_motion_idx(env: ManagerBasedEnv, command_name: str = "motion") -> torch.Tensor:
-    """Extract motion index [num_envs] for data collection."""
+    """Extract motion index [num_envs, 1] for data collection."""
     try:
         motion_command = env.command_manager.get_term(command_name)
         motion_idx = motion_command.motion_idx.clone().float()  # Convert to float for consistency
     except (AttributeError, KeyError):
         motion_idx = torch.zeros(env.num_envs, dtype=torch.float32, device=env.device)
-    return motion_idx  # [num_envs]
+    return motion_idx.unsqueeze(-1)  # [num_envs, 1] for concatenation
 
 
 def diffusion_state_observation(env: ManagerBasedEnv) -> torch.Tensor:
