@@ -1,9 +1,9 @@
 [submodule "TextOpDeploy/src/cnpy"]
 	path = TextOpDeploy/src/cnpy
-	url = git@github.com:rogersce/cnpy.git
+	url = https://github.com/rogersce/cnpy.git
 [submodule "TextOpDeploy/src/unitree_ros2"]
 	path = TextOpDeploy/src/unitree_ros2
-	url = git@github.com:unitreerobotics/unitree_ros2.git
+	url = https://github.com/unitreerobotics/unitree_ros2.git
 [submodule "diffuse_cloc"]
 	path = diffuse_cloc
 	url = https://github.com/MasterYip/pdplanner.git
